@@ -1,0 +1,29 @@
+[Unit]
+Description=Zabbix Telegram Bot Callback Handler
+Documentation=""
+After=network-online.target zabbix-server.service
+Wants=network-online.target
+BindsTo=zabbix-server.service
+
+[Service]
+Type=simple
+User={{ zbxtelegram_user }}
+Group={{ zbxtelegram_group }}
+WorkingDirectory={{ zbxtelegram_alertscripts_dir }}
+EnvironmentFile={{ zbxtelegram_env_file }}
+ExecStart={{ zbxtelegram_venv_dir }}/bin/python {{ zbxtelegram_alertscripts_dir }}/{{ zbxtelegram_bot_script_name }}
+Restart=always
+RestartSec={{ zbxtelegram_restart_sec }}
+StandardOutput=journal
+StandardError=journal
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ zbxtelegram_log_dir }} {{ zbxtelegram_cache_dir }}
+{% if ansible_selinux.status == "enabled" %}
+SELinuxContext=system_u:system_r:zabbix_t:s0
+{% endif %}
+
+[Install]
+WantedBy=multi-user.target

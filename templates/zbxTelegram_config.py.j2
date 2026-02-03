@@ -1,0 +1,138 @@
+#!/usr/lib/zabbix/alertscripts/venv/bin/python
+# -*- coding: utf-8 -*-
+########################
+
+# Telegram
+tg_token = "{{ zbxtelegram_bot_token }}"
+tg_proxy = {% if zbxtelegram_proxy_enabled %}True{% else %}False{% endif %}
+{% if zbxtelegram_proxy_enabled %}
+tg_proxy_server = "{{ zbxtelegram_proxy_url }}"
+{% else %}
+tg_proxy_server = None
+{% endif %}
+
+# Zabbix
+zabbix_api_url = "{{ zbxtelegram_zabbix_url.rstrip('/') }}"
+zabbix_api_login = "{{ zbxtelegram_zabbix_user }}"
+zabbix_api_pass = "{{ zbxtelegram_zabbix_pass }}"
+
+# Paths
+config_log_file = "{{ zbxtelegram_log_dir }}/znt.log"
+#### TODO: cache.json -> id.cache 
+config_cache_file = "{{ zbxtelegram_cache_dir }}/cache.json"
+config_debug_mode = {% if zbxtelegram_debug_enabled %}True{% else %}False{% endif %}
+config_exc_info = False
+
+# Keyboard
+zabbix_keyboard = {% if zbxtelegram_keyboard_enabled %}True{% else %}False{% endif %}
+zabbix_keyboard_row_width = 5
+zabbix_keyboard_button_message = "💬 Message"
+zabbix_keyboard_button_acknowledge = "✅ Acknowledge"
+zabbix_keyboard_button_history = "📈 History"
+zabbix_keyboard_button_last_value = "⏱ Last value"
+zabbix_keyboard_button_graph = "📊 Graph"
+
+# Graphs
+zabbix_graph = True
+zabbix_graph_period_default = {{ zbxtelegram_graph_period_default }}
+zabbix_graph_chart = "{zabbix_server}/chart3.php?name={name}&from=now-{range_time}&to=now&width=900&height=200&items[0][itemid]={itemid}&legend=1&showtriggers=1&showworkperiod=1"
+
+# Watermark
+watermark = {% if zbxtelegram_watermark_enabled %}True{% else %}False{% endif %}
+watermark_font = "{{ zbxtelegram_watermark_font }}"
+watermark_label = "{{ zbxtelegram_watermark_label }}"
+watermark_fill = 255
+watermark_minimal_height = 30
+watermark_rotate = 0
+watermark_expand = True
+watermark_text_color = (255, 0, 0, 128)
+
+
+
+# Messages format
+body_messages = "<b>{subject}</b>{body}{links}{tags}{mentions}"
+body_messages_max_symbol = 1200
+body_messages_cut_symbol = True
+body_messages_url = True
+body_messages_url_notes = True  #?
+body_messages_url_graphs = True #?
+body_messages_url_host = True   #?
+body_messages_url_ack = True    #?
+body_messages_url_event = True  #?
+body_messages_url_delimiter = " "
+body_messages_url_template = "{icon} {url}"
+body_messages_url_emoji_notes = "📝"
+body_messages_url_emoji_host = "🖥"   # URL host
+body_messages_url_emoji_ack = "✅"    # '✉️'  # URL update problem
+body_messages_url_emoji_event = "👁"   #  '📋'  # URL in event
+body_messages_url_emoji_graphs = "📊" # URL history graph item
+body_messages_url_emoji_no_url = "🔗" #  '➖'
+body_messages_tags = True
+body_messages_tags_delimiter = " "
+body_messages_tags_event = False
+body_messages_tags_eventid = False
+body_messages_tags_itemid = False
+body_messages_tags_triggerid = False
+body_messages_tags_actionid = False
+body_messages_tags_hostid = False
+body_messages_tags_trigger_settings = True
+body_messages_tags_prefix_eventid = "eid_"
+body_messages_tags_prefix_itemid = "iid_"
+body_messages_tags_prefix_triggerid = "tid_"
+body_messages_tags_prefix_actionid = "aid_"
+body_messages_tags_prefix_hostid = "hid_"
+body_messages_tags_no = "#no_tags"
+body_messages_tags_eventtag = True
+body_messages_mentions_settings = True
+body_messages_title = "{title} ({period_time})"
+
+# Trigger settings tags
+trigger_settings_tag = "ZNTSettings"
+trigger_settings_tag_no_alert = "no_alert"
+trigger_settings_tag_not_notify = "not_notify"
+trigger_settings_tag_no_graph = "no_graph"
+# TODO: проверить зачем используется
+trigger_settings_tag_graph_period = "graph_period" # 'period='  # period=43200
+
+# Trigger mentions tag
+trigger_info_mentions_tag = "mentions"
+
+
+# TODO:  выдумано? Проверить, используются ли эти переменные в коде
+trigger_settings_tag_graph_normal = 'graph_normal'
+trigger_settings_tag_graph_stacked = 'graph_stacked'
+trigger_settings_tag_graph_pie = 'graph_pie'
+trigger_settings_tag_graph_exploded = 'graph_exploded'
+
+
+
+# Zabbix links
+zabbix_host_link = "{zabbix_server}/hosts.php?form=update&hostid={host}"
+zabbix_graph_link = "{zabbix_server}/chart3.php?itemids%5B%5D={itemid}&period={range_time}"
+zabbix_ack_link = "{zabbix_server}/zabbix.php?action=acknowledge.edit&eventids%5B%5D={eventid}"
+zabbix_event_link = "{zabbix_server}/zabbix.php?action=problem.view&eventid={eventid}"
+
+# TODO: У старого мапинга ключи другие
+# старый мапинг
+zabbix_status_emoji_map = {
+    "Problem": "🚨",
+    "Resolved": "✅",
+    "Update": "🚧",
+    "Not classified": "⁉️",
+    "Information": "💙",
+    "Warning": "💛",
+    "Average": "🧡",
+    "High": "❤️",
+    "Disaster": "💔",
+    "Test": "🚽💩"}
+
+# zabbix_status_emoji_map = {
+#     "PROBLEM": "🔴",
+#     "OK": "🟢",
+#     "UNKNOWN": "❓",
+#     "Average": "⚠️",
+#     "High": "🔴",
+#     "Disaster": "💥",
+#     "Information": "ℹ️",
+#     "Warning": "⚠️"
+# }

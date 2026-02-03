@@ -1,0 +1,46 @@
+---
+- name: configure_directories | Создать директорию для файлов скрипта
+  tags:
+    - install
+    - config
+  file:
+    path: "{{ zbxtelegram_files_dir }}"
+    state: directory
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0755"
+
+- name: configure_directories | Создать директорию для логов
+  tags:
+    - install
+    - config
+  file:
+    path: "{{ zbxtelegram_log_dir }}"
+    state: directory
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0755"
+
+- name: configure_directories | Создать директорию для кэша
+  tags:
+    - install
+    - config
+  file:
+    path: "{{ zbxtelegram_cache_dir }}"
+    state: directory
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0755"
+
+- name: configure_directories | Создать файл лога с правильными правами
+  tags:
+    - install
+    - config
+  file:
+    path: "{{ zbxtelegram_log_dir }}/znt.log"
+    state: touch
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0644"
+
+...

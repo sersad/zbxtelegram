@@ -1,0 +1,48 @@
+---
+- name: Убедиться, что роль запускается от root
+  tags:
+    - always
+  assert:
+    that:
+      - ansible_user_id == "root"
+    fail_msg: "Роль должна запускаться с правами root (become: yes)"
+
+- name: Установить системные зависимости
+  tags:
+    - install
+  import_tasks: install_dependencies.yml
+
+- name: Настроить директории и права
+  tags:
+    - install
+    - config
+  import_tasks: configure_directories.yml
+
+- name: Развернуть скрипты и конфигурацию
+  tags:
+    - deploy
+  import_tasks: deploy_scripts.yml
+
+- name: Настроить виртуальное окружение Python
+  tags:
+    - venv
+  import_tasks: configure_venv.yml
+
+- name: Настроить политики SELinux для RED OS
+  tags:
+    - selinux
+  import_tasks: configure_selinux.yml
+  when: ansible_selinux.status == "enabled"
+
+- name: Настроить системный сервис
+  tags:
+    - always
+  import_tasks: configure_systemd.yml
+
+- name: Интегрировать с Zabbix (опционально)
+  tags:
+    - always
+  import_tasks: integrate_zabbix.yml
+  when: zbxtelegram_zabbix_integration|default(false)
+
+...

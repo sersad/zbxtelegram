@@ -1,0 +1,35 @@
+---
+- name: 'configure_systemd | Сгенерировать файл переменных окружения'
+  tags:
+    - systemd
+  template:
+    src: "zbxtelegrambot.env.j2"
+    dest: "{{ zbxtelegram_env_file }}"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  notify: Restart zbxtelegrambot
+
+- name: 'configure_systemd | Сгенерировать systemd unit'
+  tags:
+    - systemd
+  template:
+    src: "zbxtelegrambot.service.j2"
+    dest: "/etc/systemd/system/{{ zbxtelegram_service_name }}"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart zbxtelegrambot
+
+- name: 'configure_systemd | Включить и запустить сервис'
+  tags:
+    - systemd
+  systemd:
+    name: "{{ zbxtelegram_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+...

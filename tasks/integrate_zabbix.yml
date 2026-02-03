@@ -1,0 +1,35 @@
+---
+- name: Проверить доступность Zabbix API
+  uri:
+    url: "{{ zbxtelegram_zabbix_url }}/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "apiinfo.version"
+      id: 1
+    validate_certs: no
+  register: zabbix_check
+  failed_when: zabbix_check.status != 200
+
+- name: Создать медиа-тип Telegram в Zabbix (через API)
+  uri:
+    url: "{{ zbxtelegram_zabbix_url }}/api_jsonrpc.php"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "mediatype.create"
+      params:
+        name: "{{ zbxtelegram_zabbix_media_type }}"
+        type: 0  # Script
+        exec_path: "{{ zbxtelegram_alertscripts_dir }}/{{ zbxtelegram_script_name }}"
+        exec_params: "{ALERT.SENDTO}\n{ALERT.SUBJECT}\n{ALERT.MESSAGE}\n"
+      auth: "{{ zabbix_auth_token }}"
+      id: 1
+    validate_certs: no
+  register: mediatype_create
+  failed_when: mediatype_create.status not in [200, 400]  # 400 = уже существует
+  when: zabbix_auth_token is defined
+
+...

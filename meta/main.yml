@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: Sergey Sadovnikov
+  description: Zabbix Telegram notifications with interactive buttons for RED OS
+  company: RTK
+  license: MIT
+  min_ansible_version: "2.9"
+  platforms:
+    - name: RedOS
+      versions:
+        - "8"
+        - "9"
+  galaxy_tags:
+    - zabbix
+    - telegram
+    - monitoring
+    - redos
+dependencies: []

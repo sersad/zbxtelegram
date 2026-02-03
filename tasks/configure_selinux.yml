@@ -1,0 +1,42 @@
+---
+- name: 'configure_selinux | Установить политику SELinux для директории логов'
+  tags:
+    - selinux
+  sefcontext:
+    target: "{{ zbxtelegram_log_dir }}(/.*)?"
+    setype: "{{ zbxtelegram_selinux_log_context }}"
+    state: present
+  notify: Restore SELinux contexts
+  when: ansible_selinux.status == "enabled"
+
+- name: 'configure_selinux | Установить политику SELinux для директории кэша'
+  tags:
+    - selinux
+  sefcontext:
+    target: "{{ zbxtelegram_cache_dir }}(/.*)?"
+    setype: "{{ zbxtelegram_selinux_lib_context }}"
+    state: present
+  notify: Restore SELinux contexts
+  when: ansible_selinux.status == "enabled"
+
+- name: 'configure_selinux | Установить политику SELinux для alertscripts'
+  tags:
+    - selinux
+  sefcontext:
+    target: "{{ zbxtelegram_alertscripts_dir }}(/.*)?"
+    setype: "{{ zbxtelegram_selinux_alertscripts_context }}"
+    state: present
+  notify: Restore SELinux contexts
+  when: ansible_selinux.status == "enabled"
+
+- name: 'configure_selinux | Применить политики SELinux (restorecon)'
+  tags:
+    - selinux
+  command: "restorecon -Rv {{ item }}"
+  loop:
+    - "{{ zbxtelegram_log_dir }}"
+    - "{{ zbxtelegram_cache_dir }}"
+    - "{{ zbxtelegram_alertscripts_dir }}"
+  when: ansible_selinux.status == "enabled"
+
+...

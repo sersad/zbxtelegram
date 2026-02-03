@@ -1,0 +1,22 @@
+---
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Restart zbxtelegrambot
+  systemd:
+    name: "{{ zbxtelegram_service_name }}"
+    state: restarted
+
+- name: Restore SELinux contexts
+  command: "restorecon -Rv {{ zbxtelegram_log_dir }} {{ zbxtelegram_cache_dir }} {{ zbxtelegram_alertscripts_dir }}"
+
+- name: Configure virtual environment
+  pip:
+    requirements: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
+    virtualenv: "{{ zbxtelegram_venv_dir }}"
+    virtualenv_command: "python3 -m venv"
+  register: pip_install
+  until: pip_install is succeeded
+
+...

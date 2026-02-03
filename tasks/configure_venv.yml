@@ -1,0 +1,42 @@
+---
+- name: 'configure_venv | Создать виртуальное окружение'
+  tags:
+    - install
+    - venv
+  command:
+    cmd: "python3 -m venv {{ zbxtelegram_venv_dir }}"
+    creates: "{{ zbxtelegram_venv_dir }}/bin/activate"
+
+- name: 'configure_venv | Обновить pip в виртуальном окружении'
+  tags:
+    - install
+    - venv
+  command:
+    cmd: "{{ zbxtelegram_venv_dir }}/bin/pip install --upgrade pip setuptools wheel"
+    creates: "{{ zbxtelegram_venv_dir }}/bin/pip3"
+
+- name: 'configure_venv | Скопировать файл зависимостей'
+  tags:
+    - install
+    - venv
+  copy:
+    src: requirements.txt
+    dest: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0644"
+  notify:
+    - Configure virtual environment
+
+- name: 'configure_venv | Установить зависимости в виртуальное окружение'
+  tags:
+    - install
+    - venv
+  pip:
+    requirements: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
+    virtualenv: "{{ zbxtelegram_venv_dir }}"
+    virtualenv_command: "python3 -m venv"
+  register: pip_install
+  until: pip_install is succeeded
+
+...

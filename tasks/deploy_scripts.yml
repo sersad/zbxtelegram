@@ -1,0 +1,35 @@
+---
+- name: 'deploy_scripts | Скопировать основной алерт-скрипт'
+  tags:
+    - deploy
+  copy:
+    src: "{{ zbxtelegram_script_name }}"
+    dest: "{{ zbxtelegram_alertscripts_dir }}/{{ zbxtelegram_script_name }}"
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0755"
+  notify: Restart zbxtelegrambot
+
+- name: 'deploy_scripts | Сгенерировать конфигурационный файл'
+  tags:
+    - deploy
+  template:
+    src: "zbxTelegram_config.py.j2"
+    dest: "{{ zbxtelegram_alertscripts_dir }}/{{ zbxtelegram_config_name }}"
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0640"
+  notify: Restart zbxtelegrambot
+
+- name: 'deploy_scripts | Сгенерировать демон обработки колбэков'
+  tags:
+    - deploy
+  copy:
+    src: "zbxTelegramBot.py"
+    dest: "{{ zbxtelegram_alertscripts_dir }}/{{ zbxtelegram_bot_script_name }}"
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0755"
+  notify: Restart zbxtelegrambot
+
+...
