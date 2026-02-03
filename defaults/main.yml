@@ -33,9 +33,9 @@ zbxtelegram_watermark_label: "Только для внутреннего исп�
 zbxtelegram_graph_period_default: 10800  # 3 часа
 
 # --- SELinux ---
-zbxtelegram_selinux_log_context: "zabbix_var_log_t"
-zbxtelegram_selinux_lib_context: "zabbix_var_lib_t"
-zbxtelegram_selinux_alertscripts_context: "zabbix_agent_exec_t"
+zbxtelegram_selinux_log_context: "var_log_t"
+zbxtelegram_selinux_lib_context: "var_lib_t"
+zbxtelegram_selinux_alertscripts_context: "bin_t"
 
 # --- Systemd ---
 zbxtelegram_service_name: "zbxtelegrambot.service"

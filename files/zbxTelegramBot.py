@@ -27,7 +27,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 
 # Aiozabbix
 from aiozabbix import ZabbixAPI
-from aiozabbix.exceptions import ZabbixAPIException
+from aiozabbix import ZabbixAPIException
 
 # aiohttp для прокси
 import aiohttp

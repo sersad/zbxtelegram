@@ -5,6 +5,7 @@
 # Telegram
 tg_token = "{{ zbxtelegram_bot_token }}"
 tg_proxy = {% if zbxtelegram_proxy_enabled %}True{% else %}False{% endif %}
+
 {% if zbxtelegram_proxy_enabled %}
 tg_proxy_server = "{{ zbxtelegram_proxy_url }}"
 {% else %}
@@ -21,10 +22,12 @@ config_log_file = "{{ zbxtelegram_log_dir }}/znt.log"
 #### TODO: cache.json -> id.cache 
 config_cache_file = "{{ zbxtelegram_cache_dir }}/cache.json"
 config_debug_mode = {% if zbxtelegram_debug_enabled %}True{% else %}False{% endif %}
+
 config_exc_info = False
 
 # Keyboard
 zabbix_keyboard = {% if zbxtelegram_keyboard_enabled %}True{% else %}False{% endif %}
+
 zabbix_keyboard_row_width = 5
 zabbix_keyboard_button_message = "💬 Message"
 zabbix_keyboard_button_acknowledge = "✅ Acknowledge"
@@ -39,6 +42,7 @@ zabbix_graph_chart = "{zabbix_server}/chart3.php?name={name}&from=now-{range_tim
 
 # Watermark
 watermark = {% if zbxtelegram_watermark_enabled %}True{% else %}False{% endif %}
+
 watermark_font = "{{ zbxtelegram_watermark_font }}"
 watermark_label = "{{ zbxtelegram_watermark_label }}"
 watermark_fill = 255

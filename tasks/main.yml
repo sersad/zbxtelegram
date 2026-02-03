@@ -36,7 +36,7 @@
 
 - name: Настроить системный сервис
   tags:
-    - always
+    - systemd
   import_tasks: configure_systemd.yml
 
 - name: Интегрировать с Zabbix (опционально)
