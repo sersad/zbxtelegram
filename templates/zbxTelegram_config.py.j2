@@ -68,7 +68,7 @@ body_messages_url_template = "{icon} {url}"
 body_messages_url_emoji_notes = "📝"
 body_messages_url_emoji_host = "🖥"   # URL host
 body_messages_url_emoji_ack = "✅"    # '✉️'  # URL update problem
-body_messages_url_emoji_event = "👁"   #  '📋'  # URL in event
+body_messages_url_emoji_event = "📋"   #  '📋'  # URL in event
 body_messages_url_emoji_graphs = "📊" # URL history graph item
 body_messages_url_emoji_no_url = "🔗" #  '➖'
 body_messages_tags = True
@@ -109,9 +109,9 @@ trigger_settings_tag_graph_pie = 'graph_pie'
 trigger_settings_tag_graph_exploded = 'graph_exploded'
 
 
-# Zabbix links (ИСПРАВЛЕНО: убрано %5B%5D, используется правильный синтаксис)
+# Zabbix links
 # zabbix_host_link = "{zabbix_server}/zabbix.php?action=host.edit&hostid={hostid}"
-# invenroy
+# inventory
 zabbix_host_link = "{zabbix_server}/hostinventories.php?hostid={hostid}"
 zabbix_graph_link = "{zabbix_server}/history.php?action=showgraph&itemids[]={itemid}&period={range_time}"
 zabbix_event_link = "{zabbix_server}/tr_events.php?triggerid={triggerid}&eventid={eventid}"
