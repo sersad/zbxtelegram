@@ -21,7 +21,7 @@ from zbxTelegram_config import *
 
 # Aiogram
 from aiogram import Bot, Dispatcher
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, BufferedInputFile
 from aiogram.filters import Filter
 from aiogram.client.session.aiohttp import AiohttpSession
 
@@ -49,6 +49,31 @@ try:
     logger.addHandler(file_handler)
 except PermissionError as e:
     logger.error(f"Cannot write to log file {config_log_file}: {e}")
+
+
+def remove_button_by_action(original_markup, action_prefix):
+    """
+    Удаляет кнопку из клавиатуры по префиксу действия в callback_data.
+    Например: action_prefix='a:' удалит кнопку подтверждения ✅
+    """
+    if not original_markup or not original_markup.inline_keyboard:
+        return None
+    
+    new_rows = []
+    for row in original_markup.inline_keyboard:
+        # Фильтруем кнопки: оставляем только те, у которых callback_data НЕ начинается с указанного префикса
+        new_row = [
+            btn for btn in row 
+            if not (btn.callback_data and btn.callback_data.startswith(action_prefix))
+        ]
+        if new_row:  # Сохраняем только непустые строки
+            new_rows.append(new_row)
+    
+    # Если все кнопки удалены — возвращаем None (убираем клавиатуру полностью)
+    if not new_rows:
+        return None
+    
+    return InlineKeyboardMarkup(inline_keyboard=new_rows)
 
 
 class CallbackFilter(Filter):
@@ -79,6 +104,7 @@ async def init_zabbix():
         logger.error(f"Failed to authenticate to Zabbix API: {e}", exc_info=True)
         await session.close()
         return None, None
+
 
 async def handle_acknowledge(callback: CallbackQuery, eventid: str, zapi):
     """Подтверждение события БЕЗ закрытия (action=6 = подтверждение + сообщение)"""
@@ -127,24 +153,42 @@ async def handle_acknowledge(callback: CallbackQuery, eventid: str, zapi):
                 message=f"Acknowledged via Telegram by {callback.from_user.full_name} (@{callback.from_user.username or 'N/A'})"
             )
             
-            # === БЕЗОПАСНОЕ ОБНОВЛЕНИЕ СООБЩЕНИЯ (для текста, изображений и медиа) ===
+            # === УДАЛЕНИЕ ТОЛЬКО КНОПКИ ✅ (префикс 'a:') ===
+            original_markup = callback.message.reply_markup
+            new_rows = []
+            
+            # Формируем новую клавиатуру без кнопки подтверждения
+            if original_markup and hasattr(original_markup, 'inline_keyboard') and original_markup.inline_keyboard:
+                for row in original_markup.inline_keyboard:
+                    # Оставляем все кнопки, кроме тех, у которых callback_data начинается с 'a:'
+                    new_row = [
+                        btn for btn in row 
+                        if not (hasattr(btn, 'callback_data') and btn.callback_data and btn.callback_data.startswith('a:'))
+                    ]
+                    if new_row:  # Сохраняем только непустые строки
+                        new_rows.append(new_row)
+            
+            # Создаём новую клавиатуру (или None если все кнопки удалены)
+            new_markup = InlineKeyboardMarkup(inline_keyboard=new_rows) if new_rows else None
+            
+            # Формируем текст подтверждения
             ack_text = f"\n\n✅ Подтверждено: {callback.from_user.full_name}\nХост: {host_name}"
             
             # Случай 1: текстовое сообщение
             if callback.message.text:
-                new_text = (callback.message.text + ack_text)[:4096]  # Ограничение Telegram на 4096 символов
+                new_text = (callback.message.text + ack_text)[:4096]
                 await callback.message.edit_text(
                     new_text,
-                    reply_markup=None,
+                    reply_markup=new_markup,  # ← Клавиатура БЕЗ кнопки ✅, остальные кнопки сохранены
                     parse_mode="HTML"
                 )
             
             # Случай 2: медиа-сообщение (изображение/видео) с подписью
             elif callback.message.caption:
-                new_caption = (callback.message.caption + ack_text)[:1024]  # Ограничение на подпись — 1024 символа
+                new_caption = (callback.message.caption + ack_text)[:1024]
                 await callback.message.edit_caption(
                     caption=new_caption,
-                    reply_markup=None,
+                    reply_markup=new_markup,  # ← Клавиатура БЕЗ кнопки ✅
                     parse_mode="HTML"
                 )
             
@@ -195,7 +239,6 @@ async def handle_acknowledge(callback: CallbackQuery, eventid: str, zapi):
     except Exception as e:
         await callback.message.answer(f"❌ Внутренняя ошибка: {str(e)[:80]}")
         logger.error(f"Unexpected error for event {eventid}: {e}", exc_info=True)
-
 
 
 async def handle_messages(callback: CallbackQuery, eventid: str, zapi):

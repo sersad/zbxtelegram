@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/lib/zabbix/alertscripts/venv/bin/python
 # -*- coding: utf-8 -*-
 """
 Zabbix Telegram Alert Script (aiogram 3.x)
