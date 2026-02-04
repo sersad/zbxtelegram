@@ -21,6 +21,37 @@
     mode: "0640"
   notify: Restart zbxtelegrambot
 
+
+- name: 'deploy_scripts | Скопировать дополнительные файлы'
+  tags:
+    - deploy
+  copy:
+    src: "{{ item }}"
+    dest: "{{ zbxtelegram_alertscripts_dir }}/{{ item }}"
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0644"
+  loop:
+    - actions.example
+  notify: Restart zbxtelegrambot
+
+- name: 'deploy_scripts | Скопировать дополнительные файлы скрипта'
+  tags:
+    - deploy
+  copy:
+    src: "zbxTelegram_files/{{ item }}"
+    dest: "{{ zbxtelegram_files_dir }}/{{ item }}"
+    owner: "{{ zbxtelegram_user }}"
+    group: "{{ zbxtelegram_group }}"
+    mode: "0644"
+  loop:
+    - __init__.py
+    - ArialMT.ttf
+    - error_send_photo.png
+    - test.png
+  notify: Restart zbxtelegrambot
+
+
 - name: 'deploy_scripts | Сгенерировать демон обработки колбэков'
   tags:
     - deploy

@@ -1,12 +1,4 @@
 ---
-- name: Убедиться, что роль запускается от root
-  tags:
-    - always
-  assert:
-    that:
-      - ansible_user_id == "root"
-    fail_msg: "Роль должна запускаться с правами root (become: yes)"
-
 - name: Установить системные зависимости
   tags:
     - install

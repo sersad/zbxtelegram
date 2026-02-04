@@ -1,5 +1,14 @@
 #!/usr/lib/zabbix/alertscripts/venv/bin/python
 # -*- coding: utf-8 -*-
+########################
+#    Sokolov Dmitry    #
+# xx.sokolov@gmail.com #
+#  https://t.me/ZbxNTg #
+########################
+# https://github.com/xxsokolov/Zabbix-Notification-Telegram
+__author__ = "Sokolov Dmitry"
+__maintainer__ = "Sokolov Dmitry"
+__license__ = "MIT"
 import telebot
 from telebot import apihelper
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
@@ -41,7 +50,7 @@ class ArgParsing:
         self.parser = argparse.ArgumentParser(
             prog='znt',
             description='''Скрипт для для отправки Zabbix нотификаций в Telegram''',
-            epilog='''Скрипт для для отправки Zabbix нотификаций в Telegram''',
+            epilog='''(c) Dmitry Sokolov 2019 @ https://github.com/xxsokolov/''',
             add_help=False, formatter_class=RawTextHelpFormatter)
 
         # self.parent_group = self.parser.add_argument_group(title='Параметры')
@@ -67,7 +76,6 @@ class ArgParsing:
         # res = parser.parse_args()
 
         return self.parser
-
 
 class System:
     def __init__(self, debug=False):
@@ -128,14 +136,12 @@ session.mount('http://', SSLAdapter())
 import telebot.apihelper as apihelper
 original_get_session = apihelper._get_req_session
 
-
 def patched_get_session():
     s = original_get_session()
     s.mount('https://', SSLAdapter())
     s.mount('http://', SSLAdapter())
     s.verify = False
     return s
-
 
 apihelper._get_req_session = patched_get_session
 
