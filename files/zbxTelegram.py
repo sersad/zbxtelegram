@@ -193,6 +193,7 @@ def get_cookie():
         return False
     return cookie
 
+
 def get_chart_png(itemid, graff_name, period=None):
     try:
         cookies = get_cookie()
@@ -223,6 +224,7 @@ def get_chart_png(itemid, graff_name, period=None):
         if loggings:
             loggings.error(f"Exception occurred getting chart: {err}", exc_info=config_exc_info)
         return None
+
 
 def create_tags_list(_bool=False, tag=None, _type=None, zntsettingstag=False):
     tags_list = []
@@ -261,6 +263,7 @@ def create_tags_list(_bool=False, tag=None, _type=None, zntsettingstag=False):
             loggings.warning(f"Tags creation failed: {e}")
         return body_messages_tags_no if not zntsettingstag else {'tags': body_messages_tags_no, trigger_settings_tag: []}
 
+
 def create_mentions_list(_bool=False, mentions=None):
     mentions_list = []
     try:
@@ -277,6 +280,7 @@ def create_mentions_list(_bool=False, mentions=None):
             loggings.warning(f"Mentions creation failed: {e}")
         return []
 
+
 def create_links_list(_bool=None, url=None, _type=None, url_list=None):
     try:
         if _bool and url and re.search(r'\w', url):
@@ -286,6 +290,7 @@ def create_links_list(_bool=None, url=None, _type=None, url_list=None):
         if loggings:
             loggings.warning(f"Links creation failed: {e}")
         return body_messages_url_emoji_no_url if _bool else False
+
 
 def get_cache(title):
     try:
@@ -298,6 +303,7 @@ def get_cache(title):
         if loggings:
             loggings.error(f"Cache read error: {err}", exc_info=config_exc_info)
         return False
+
 
 def set_cache(title, send_id, sent_type, cache=None, update=None):
     try:
@@ -430,7 +436,7 @@ async def send_messages(
     settings_keyboard: bool = None,
     disable_notification: bool = False
 ):
-    """Отправка сообщения в Telegram (асинхронная версия)"""
+    """Отправка сообщения в Telegram с поддержкой кнопок для медиа-групп"""
     try:
         sent_id = await get_send_id(bot, sent_to)
         if not message or not sent_to:
@@ -441,24 +447,36 @@ async def send_messages(
         # Случай 1: список медиа (несколько графиков)
         if isinstance(media_data, list) and media_data:
             try:
-                # Преобразуем байты в BufferedInputFile для каждого изображения
-                media_group = []
-                for i, media in enumerate(media_data):
-                    if isinstance(media, InputMediaPhoto) and isinstance(media.media, bytes):
-                        media.media = BufferedInputFile(media.media, filename=f"chart_{i}.png")
-                    media_group.append(media)
-                
-                media_group[0].caption = message
-                media_group[0].parse_mode = "HTML"
-                await bot.send_media_group(
+                # Отправляем ПЕРВЫЙ график с кнопками
+                first_photo = media_data[0]
+                await bot.send_photo(
                     chat_id=sent_id,
-                    media=media_group,
+                    photo=first_photo.media,
+                    caption=first_photo.caption or message,
+                    parse_mode="HTML",
+                    reply_markup=gen_markup(eventid, itemid) if zabbix_keyboard and settings_keyboard else None,
                     disable_notification=disable_notification
                 )
+                
+                # Отправляем остальные графики БЕЗ кнопок
+                if len(media_data) > 1:
+                    remaining_media = media_data[1:]
+                    for m in remaining_media:
+                        m.caption = None
+                        m.parse_mode = None
+                    
+                    # ВАЖНО: НЕТ reply_markup в send_media_group!
+                    await bot.send_media_group(
+                        chat_id=sent_id,
+                        media=remaining_media,
+                        disable_notification=disable_notification
+                    )
+                
                 if loggings:
                     me = await bot.me()
-                    loggings.info(f'Bot @{me.username}({me.id}) send media group to "{sent_to}" ({sent_id}).')
+                    loggings.info(f'Bot @{me.username}({me.id}) sent 1 photo with buttons + {len(media_data)-1} additional graphs to "{sent_to}" ({sent_id}).')
                 sys.exit(0)
+                
             except TelegramAPIError as err:
                 if hasattr(err, 'migrate_to_chat_id') and getattr(err, 'migrate_to_chat_id', None):
                     if loggings:
@@ -471,7 +489,6 @@ async def send_messages(
         # Случай 2: словарь с изображением (один график)
         elif isinstance(media_data, dict) and media_data.get('img'):
             try:
-                # Преобразуем байты в BufferedInputFile
                 photo_file = BufferedInputFile(media_data['img'], filename="chart.png")
                 await bot.send_photo(
                     chat_id=sent_id,
@@ -490,24 +507,6 @@ async def send_messages(
                         loggings.warning(f"Group chat migrated to supergroup {err.migrate_to_chat_id}")
                     set_cache(sent_to, err.migrate_to_chat_id, 'supergroup', update=sent_id)
                     await send_messages(bot, sent_to, message, media_data, eventid, itemid, settings_keyboard, disable_notification)
-                elif "IMAGE_PROCESS_FAILED" in str(err):
-                    fallback_path = f'{os.path.dirname(os.path.realpath(__file__))}/zbxTelegram_files/error_send_photo.png'
-                    try:
-                        with open(fallback_path, 'rb') as f:
-                            fallback_img = f.read()
-                        fallback_file = BufferedInputFile(fallback_img, filename="error.png")
-                        await bot.send_photo(
-                            chat_id=sent_id,
-                            photo=fallback_file,
-                            caption=message,
-                            parse_mode="HTML",
-                            reply_markup=gen_markup(eventid, itemid) if zabbix_keyboard and settings_keyboard else None,
-                            disable_notification=disable_notification
-                        )
-                    except Exception as e:
-                        if loggings:
-                            loggings.error(f"Fallback image failed: {e}")
-                        raise
                 else:
                     raise
 
@@ -541,6 +540,7 @@ async def send_messages(
         if loggings:
             loggings.error(f"Exception in send_messages: {err}", exc_info=config_exc_info)
         sys.exit(1)
+
 
 
 # ==================== ОСНОВНАЯ АСИНХРОННАЯ ФУНКЦИЯ ====================
@@ -654,27 +654,36 @@ async def main_async():
             _type=body_messages_url_emoji_notes
         )
         host_url = create_links_list(
-            _bool=data_zabbix.get('settings_hostlinks_bool') and body_messages_url_host,
-            url=zabbix_host_link.format(zabbix_server=zabbix_api_url.rstrip('/'), host=data_zabbix.get('host')),
+            _bool=True if data_zabbix.get('settings_hostlinks_bool') and body_messages_url_host else False,
+            url=zabbix_host_link.format(
+                zabbix_server=zabbix_api_url.rstrip('/'),
+                hostid=data_zabbix.get('hostid', '0')  # ← ИСПРАВЛЕНО: числовой hostid с защитой от отсутствия
+            ),
             _type=body_messages_url_emoji_host
         )
-        ack_url = create_links_list(
-            _bool=data_zabbix.get('settings_acklinks_bool') and body_messages_url_ack,
-            url=zabbix_ack_link.format(zabbix_server=zabbix_api_url.rstrip('/'), eventid=data_zabbix.get('eventid')),
-            _type=body_messages_url_emoji_ack
-        )
+
+        # ack_url = create_links_list(
+        #     _bool=True if data_zabbix.get('settings_acklinks_bool') and body_messages_url_ack else False,
+        #     url=zabbix_ack_link.format(
+        #         zabbix_server=zabbix_api_url.rstrip('/'),
+        #         eventid=data_zabbix.get('eventid', '0')
+        #     ),
+        #     _type=body_messages_url_emoji_ack
+        # )
+
         event_url = create_links_list(
-            _bool=data_zabbix.get('settings_eventlinks_bool') and body_messages_url_event,
+            _bool=True if data_zabbix.get('settings_eventlinks_bool') and body_messages_url_event else False,
             url=zabbix_event_link.format(
                 zabbix_server=zabbix_api_url.rstrip('/'),
-                eventid=data_zabbix.get('eventid'),
-                triggerid=data_zabbix.get('triggerid')
+                eventid=data_zabbix.get('eventid', '0'),
+                triggerid=data_zabbix.get('triggerid', '0')
             ),
             _type=body_messages_url_emoji_event
         )
-        
+
         # Период графика
         graph_period = zabbix_graph_period_default
+
         if isinstance(zntsettings_tags, dict) and trigger_settings_tag_graph_period in ' '.join(zntsettings_tags.get(trigger_settings_tag, [])):
             try:
                 for setting in zntsettings_tags.get(trigger_settings_tag, []):
@@ -709,8 +718,8 @@ async def main_async():
                 url_list.append(items_link)
         if event_url:
             url_list.append(event_url)
-        if ack_url:
-            url_list.append(ack_url)
+        # if ack_url:
+        #     url_list.append(ack_url)
         if host_url:
             url_list.append(host_url)
         
@@ -720,23 +729,27 @@ async def main_async():
             title=data_zabbix['title'],
             period_time=set_period_day_hour(graph_period)
         )
-        
+
         if data_zabbix.get('settings_graphs_bool') and zabbix_graph:
             num_items_id = [item_id for item_id in data_zabbix['itemid'].split() if re.search(r"\d+", item_id)]
             if len(num_items_id) == 1:
+                # Один график — передаём как словарь, обёртка в BufferedInputFile будет в send_messages
                 graphs_png = get_chart_png(
                     itemid=num_items_id[0],
                     graff_name=graphs_name,
                     period=graph_period
                 )
             elif len(num_items_id) > 1:
+                # Несколько графиков — создаём список InputMediaPhoto с правильными типами
                 graphs_png_group = []
-                for item_id in set([x for x in data_zabbix.get('itemid', '').split() if re.search(r"\d+", x)]):
+                for idx, item_id in enumerate(set([x for x in data_zabbix.get('itemid', '').split() if re.search(r"\d+", x)])):
                     chart = get_chart_png(itemid=item_id, graff_name=graphs_name, period=graph_period)
                     if chart and chart.get('img'):
-                        graphs_png_group.append(InputMediaPhoto(media=chart['img']))
+                        # КРИТИЧЕСКИ ВАЖНО: оборачиваем байты в BufferedInputFile ДО создания InputMediaPhoto
+                        buffered_img = BufferedInputFile(chart['img'], filename=f"chart_{idx}.png")
+                        graphs_png_group.append(InputMediaPhoto(media=buffered_img))
                 graphs_png = graphs_png_group if graphs_png_group else None
-        
+
         # Формирование сообщения
         subject = html.escape(args.subject.format_map(FailSafeDict(zabbix_status_emoji_map)))
         body = html.escape(data_zabbix['message'])

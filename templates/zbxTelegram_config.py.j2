@@ -109,12 +109,13 @@ trigger_settings_tag_graph_pie = 'graph_pie'
 trigger_settings_tag_graph_exploded = 'graph_exploded'
 
 
-
-# Zabbix links
-zabbix_host_link = "{zabbix_server}/hosts.php?form=update&hostid={host}"
-zabbix_graph_link = "{zabbix_server}/chart3.php?itemids%5B%5D={itemid}&period={range_time}"
-zabbix_ack_link = "{zabbix_server}/zabbix.php?action=acknowledge.edit&eventids%5B%5D={eventid}"
-zabbix_event_link = "{zabbix_server}/zabbix.php?action=problem.view&eventid={eventid}"
+# Zabbix links (ИСПРАВЛЕНО: убрано %5B%5D, используется правильный синтаксис)
+# zabbix_host_link = "{zabbix_server}/zabbix.php?action=host.edit&hostid={hostid}"
+# invenroy
+zabbix_host_link = "{zabbix_server}/hostinventories.php?hostid={hostid}"
+zabbix_graph_link = "{zabbix_server}/history.php?action=showgraph&itemids[]={itemid}&period={range_time}"
+zabbix_event_link = "{zabbix_server}/tr_events.php?triggerid={triggerid}&eventid={eventid}"
+zabbix_ack_link = "{zabbix_server}/zabbix.php?action=acknowledge.edit&eventids[]={eventid}"
 
 # TODO: У старого мапинга ключи другие
 # старый мапинг
