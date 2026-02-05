@@ -134,7 +134,35 @@ async def init_zabbix():
         return None, None
 
 
-async def handle_acknowledge(callback: CallbackQuery, eventid: str, state: FSMContext, zapi):
+async def auto_cancel_acknowledge(state: FSMContext, chat_id: int, message_id: int, bot: Bot, eventid: str):
+    """Автоматическая отмена подтверждения через 3 минуты бездействия"""
+    try:
+        # Ждём 3 минуты (180 секунд)
+        await asyncio.sleep(180)
+        
+        # Проверяем, всё ещё ли пользователь в состоянии ожидания комментария
+        current_state = await state.get_state()
+        if current_state == AcknowledgeStates.waiting_for_comment.state:
+            # Сбрасываем состояние
+            await state.clear()
+            
+            # Отправляем уведомление об отмене
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⏰ Подтверждение события #{eventid} отменено автоматически (таймаут 3 минуты истёк)"
+                )
+                logger.info(f"Auto-cancelled acknowledge for event {eventid} due to timeout (180s)")
+            except Exception as e:
+                logger.warning(f"Could not send auto-cancel notification: {e}")
+    except asyncio.CancelledError:
+        # Задача была отменена (пользователь ввёл комментарий или нажал отмену)
+        pass
+    except Exception as e:
+        logger.error(f"Error in auto_cancel_acknowledge: {e}")
+
+
+async def handle_acknowledge(callback: CallbackQuery, eventid: str, state: FSMContext, zapi, bot):
     """Запрос комментария перед подтверждением события"""
     try:
         await callback.answer()
@@ -182,10 +210,24 @@ async def handle_acknowledge(callback: CallbackQuery, eventid: str, state: FSMCo
         
         await callback.message.answer(
             f"📝 Введите комментарий для подтверждения события #{eventid}:\n\n"
-            "<i>Минимум 3 символа. Отправьте текст или нажмите «Отмена».</i>",
+            "<i>Минимум 3 символа. У вас есть 3 минуты на ввод.</i>",
             reply_markup=cancel_markup,
             parse_mode="HTML"
         )
+        
+        # Запускаем таймаут-задачу
+        timeout_task = asyncio.create_task(
+            auto_cancel_acknowledge(
+                state=state,
+                chat_id=callback.message.chat.id,
+                message_id=callback.message.message_id,
+                bot=bot,
+                eventid=eventid
+            )
+        )
+        
+        # Сохраняем задачу в состоянии для возможности отмены
+        await state.update_data(timeout_task=timeout_task)
         
         await state.set_state(AcknowledgeStates.waiting_for_comment)
         logger.info(f"User {callback.from_user.id} ({callback.from_user.full_name}) entered comment input mode for event {eventid}")
@@ -200,6 +242,13 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
     """Обработка введённого комментария и подтверждение события"""
     try:
         data = await state.get_data()
+        
+        # Отменяем таймаут-задачу (если ещё активна)
+        timeout_task = data.get('timeout_task')
+        if timeout_task and not timeout_task.done():
+            timeout_task.cancel()
+            logger.debug(f"Cancelled timeout task for event {data['eventid']}")
+        
         eventid = data['eventid']
         host_name = data['host_name']
         original_text = data['original_message_text']
@@ -250,7 +299,7 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
                     reply_markup=new_markup,
                     parse_mode="HTML"
                 )
-            else:  # Медиа с подписью (маловероятно, но для надёжности)
+            else:  # Медиа с подписью
                 await bot.edit_message_caption(
                     chat_id=chat_id,
                     message_id=message_id,
@@ -260,7 +309,6 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
                 )
         except Exception as e:
             logger.warning(f"Could not update original message {message_id}: {e}")
-            # Отправляем отдельное сообщение с подтверждением
             await message.answer(
                 f"✅ Событие #{eventid} подтверждено!\n"
                 f"💬 {user_comment}\n"
@@ -281,6 +329,14 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
 async def cancel_acknowledge(callback: CallbackQuery, state: FSMContext):
     """Отмена операции подтверждения"""
     try:
+        data = await state.get_data()
+        
+        # Отменяем таймаут-задачу
+        timeout_task = data.get('timeout_task')
+        if timeout_task and not timeout_task.done():
+            timeout_task.cancel()
+            logger.debug(f"Cancelled timeout task on manual cancel")
+        
         await state.clear()
         parts = callback.data.split(':', 1)
         eventid = parts[1] if len(parts) > 1 else 'N/A'
@@ -692,16 +748,15 @@ async def main():
         await bot_session.close()
         return 1
     
-    # === ИСПРАВЛЕННАЯ РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ (без лямбд!) ===
-    # Обработчик кнопки ✅ — запрос комментария
+    # Обработчик кнопки ✅ — запрос комментария (передаём bot!)
     @dp.callback_query(CallbackFilter(action="a"))
     async def cb_ack(callback: CallbackQuery, eventid: str, state: FSMContext):
-        await handle_acknowledge(callback, eventid, state, zapi)
+        await handle_acknowledge(callback, eventid, state, zapi, bot)  # ← bot передан!
     
-    # Обработчик текстового комментария
+    # Обработчик текстового комментария (передаём bot!)
     @dp.message(AcknowledgeStates.waiting_for_comment)
     async def msg_comment(message: Message, state: FSMContext):
-        await process_acknowledge_comment(message, state, zapi, bot)
+        await process_acknowledge_comment(message, state, zapi, bot)  # ← bot передан!
     
     # Обработчик отмены подтверждения
     @dp.callback_query(lambda c: c.data.startswith('cancel_ack:'))
