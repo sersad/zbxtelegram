@@ -614,18 +614,25 @@ async def handle_last_value(callback: CallbackQuery, eventid: str, zapi):
     """Показать последнее значение элемента данных с проверкой существования"""
     try:
         await callback.answer()
-        
-        # Проверка существования события
+       
+        # Получаем событие
         events = await zapi.event.get(
-            eventids=[eventid],
-            output=["eventid", "objectid"]
+            eventids=[int(eventid)],  # ← ЧИСЛО
+            output=["eventid", "clock", "value", "r_eventid", "objectid"],
+            selectHosts=["hostid", "name"],
+            selectRelatedObject=["description", "expression"]
         )
-        
+
         if not events:
             await callback.message.answer("❌ Событие не найдено")
             logger.warning(f"Event {eventid} not found for last value request")
             return
-        
+
+        event = events[0]
+        host_name = event.get('hosts', [{}])[0].get('name', 'N/A') if event.get('hosts') else 'N/A'
+        trigger_name = event.get('relatedObject', {}).get('description', 'N/A')
+
+
         triggerid = events[0]['objectid']
         
         # Получаем элементы данных
@@ -640,7 +647,7 @@ async def handle_last_value(callback: CallbackQuery, eventid: str, zapi):
             await callback.message.answer("ℹ️ Нет данных для отображения")
             return
         
-        lines = ["⏱ Последние значения:"]
+        lines = [f"⏱ Последние значения для события #{eventid} {trigger_name} на {host_name}:"]
         for item in items:
             dt = datetime.fromtimestamp(int(item['lastclock'])) if item.get('lastclock') else None
             value = item.get('lastvalue', 'N/A')
