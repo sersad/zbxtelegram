@@ -29,11 +29,6 @@ config_exc_info = False
 zabbix_keyboard = {% if zbxtelegram_keyboard_enabled %}True{% else %}False{% endif %}
 
 zabbix_keyboard_row_width = 5
-zabbix_keyboard_button_message = "💬 Message"
-zabbix_keyboard_button_acknowledge = "✅ Acknowledge"
-zabbix_keyboard_button_history = "📈 History"
-zabbix_keyboard_button_last_value = "⏱ Last value"
-zabbix_keyboard_button_graph = "📊 Graph"
 
 # Graphs
 zabbix_graph = True
@@ -52,33 +47,28 @@ watermark_expand = True
 watermark_text_color = (255, 0, 0, 128)
 
 
-
 # Messages format
 body_messages = "<b>{subject}</b>{body}{links}{tags}{mentions}"
 body_messages_max_symbol = 1200
 body_messages_cut_symbol = True
-body_messages_url = True
-body_messages_url_notes = True  #?
-body_messages_url_graphs = True #?
-body_messages_url_host = True   #?
-body_messages_url_ack = True    #?
-body_messages_url_event = True  #?
+
 body_messages_url_delimiter = " "
 body_messages_url_template = "{icon} {url}"
-body_messages_url_emoji_notes = "📝"
-body_messages_url_emoji_host = "🖥"   # URL host
-body_messages_url_emoji_ack = "✅"    # '✉️'  # URL update problem
-body_messages_url_emoji_event = "📋"   #  '📋'  # URL in event
-body_messages_url_emoji_graphs = "📊" # URL history graph item
-body_messages_url_emoji_no_url = "🔗" #  '➖'
-body_messages_tags = True
 body_messages_tags_delimiter = " "
-body_messages_tags_event = True
-body_messages_tags_eventid = True
-body_messages_tags_itemid = False
-body_messages_tags_triggerid = True
-body_messages_tags_actionid = False
-body_messages_tags_hostid = True
+body_messages_tags = {% if zbxtelegram_tags  %}True{% else %}False{% endif %}
+
+body_messages_tags_event = {% if zbxtelegram_tags_event  %}True{% else %}False{% endif %}
+
+body_messages_tags_eventid = {% if zbxtelegram_tags_eventid  %}True{% else %}False{% endif %}
+
+body_messages_tags_itemid = {% if zbxtelegram_tags_itemid  %}True{% else %}False{% endif %}
+
+body_messages_tags_triggerid = {% if zbxtelegram_tags_triggerid  %}True{% else %}False{% endif %}
+
+body_messages_tags_actionid = {% if zbxtelegram_tags_actionid  %}True{% else %}False{% endif %}
+
+body_messages_tags_hostid = {% if zbxtelegram_tags_hostid  %}True{% else %}False{% endif %}
+
 body_messages_tags_trigger_settings = True
 body_messages_tags_prefix_eventid = "eid_"
 body_messages_tags_prefix_itemid = "iid_"
@@ -92,21 +82,16 @@ body_messages_title = "{title} ({period_time})"
 
 # Trigger settings tags
 trigger_settings_tag = "ZNTSettings"
+# TODO: добавить обработку таких тегов
 trigger_settings_tag_no_alert = "no_alert"
 trigger_settings_tag_not_notify = "not_notify"
 trigger_settings_tag_no_graph = "no_graph"
-# TODO: проверить зачем используется
-trigger_settings_tag_graph_period = "graph_period" # 'period='  # period=43200
+
+trigger_settings_tag_graph_period = "graphs_period" # 'period='  # period=43200
 
 # Trigger mentions tag
 trigger_info_mentions_tag = "mentions"
 
-
-# TODO:  выдумано? Проверить, используются ли эти переменные в коде
-trigger_settings_tag_graph_normal = 'graph_normal'
-trigger_settings_tag_graph_stacked = 'graph_stacked'
-trigger_settings_tag_graph_pie = 'graph_pie'
-trigger_settings_tag_graph_exploded = 'graph_exploded'
 
 
 # Zabbix links
@@ -115,7 +100,6 @@ trigger_settings_tag_graph_exploded = 'graph_exploded'
 zabbix_host_link = "{zabbix_server}/hostinventories.php?hostid={hostid}"
 zabbix_graph_link = "{zabbix_server}/history.php?action=showgraph&itemids[]={itemid}&period={range_time}"
 zabbix_event_link = "{zabbix_server}/tr_events.php?triggerid={triggerid}&eventid={eventid}"
-zabbix_ack_link = "{zabbix_server}/zabbix.php?action=acknowledge.edit&eventids[]={eventid}"
 
 # TODO: У старого мапинга ключи другие
 # старый мапинг

@@ -32,6 +32,15 @@ zbxtelegram_watermark_font: "{{ zbxtelegram_alertscripts_dir }}/zbxTelegram_file
 zbxtelegram_watermark_label: "Только для внутреннего использования"
 zbxtelegram_graph_period_default: 10800  # 3 часа
 
+zbxtelegram_tags: true
+zbxtelegram_tags_event: true
+zbxtelegram_tags_eventid: true
+zbxtelegram_tags_itemid: false
+zbxtelegram_tags_triggerid: true
+zbxtelegram_tags_actionid: false
+zbxtelegram_tags_hostid: true
+
+
 # --- SELinux ---
 zbxtelegram_selinux_log_context: "var_log_t"
 zbxtelegram_selinux_lib_context: "var_lib_t"

@@ -281,17 +281,6 @@ def create_mentions_list(_bool=False, mentions=None):
         return []
 
 
-def create_links_list(_bool=None, url=None, _type=None, url_list=None):
-    try:
-        if _bool and url and re.search(r'\w', url):
-            return body_messages_url_template.format(url=url, icon=_type)
-        return body_messages_url_emoji_no_url if _bool else (url_list if url_list else False)
-    except Exception as e:
-        if loggings:
-            loggings.warning(f"Links creation failed: {e}")
-        return body_messages_url_emoji_no_url if _bool else False
-
-
 def get_cache(title):
     try:
         if not os.path.exists(config_cache_file):
@@ -655,40 +644,29 @@ async def main_async():
         
         # Графики
         graph_index = 1
-        if body_messages_url and data_zabbix.get('settings_graphlinks_bool') and body_messages_url_graphs:
-            for item_id in set([x for x in data_zabbix.get('itemid', '').split() if re.search(r"\d+", x)]):
-                graph_url = zabbix_graph_link.format(
-                    zabbix_server=zabbix_api_url.rstrip('/'),
-                    itemid=item_id.strip(),
-                    range_time=graph_period
-                )
-                url_list_html.append(f'<a href="{graph_url}">📊{item_id.strip()}</a>')
-                graph_index += 1
+        for item_id in set([x for x in data_zabbix.get('itemid', '').split() if re.search(r"\d+", x)]):
+            graph_url = zabbix_graph_link.format(
+                zabbix_server=zabbix_api_url.rstrip('/'),
+                itemid=item_id.strip(),
+                range_time=graph_period
+            )
+            url_list_html.append(f'<a href="{graph_url}">📊{item_id.strip()}</a>')
+            graph_index += 1
         
         # Событие
-        if body_messages_url and data_zabbix.get('settings_eventlinks_bool') and body_messages_url_event:
-            event_url = zabbix_event_link.format(
-                zabbix_server=zabbix_api_url.rstrip('/'),
-                eventid=data_zabbix.get('eventid', '0'),
-                triggerid=data_zabbix.get('triggerid', '0')
-            )
-            url_list_html.append(f'<a href="{event_url}">🔍Event</a>')
-        
-        # Подтверждение (активно только если разрешено)
-        # if body_messages_url and data_zabbix.get('settings_acklinks_bool') and body_messages_url_ack:
-        #     ack_url = zabbix_ack_link.format(
-        #         zabbix_server=zabbix_api_url.rstrip('/'),
-        #         eventid=data_zabbix.get('eventid', '0')
-        #     )
-        #     url_list_html.append(f'<a href="{ack_url}">подтвердить</a>')
-        
+        event_url = zabbix_event_link.format(
+            zabbix_server=zabbix_api_url.rstrip('/'),
+            eventid=data_zabbix.get('eventid', '0'),
+            triggerid=data_zabbix.get('triggerid', '0')
+        )
+        url_list_html.append(f'<a href="{event_url}">🔍Event</a>')
+       
         # Хост (инвентарные данные)
-        if body_messages_url and data_zabbix.get('settings_hostlinks_bool') and body_messages_url_host:
-            host_url = zabbix_host_link.format(
-                zabbix_server=zabbix_api_url.rstrip('/'),
-                hostid=data_zabbix.get('hostid', '0')
-            )
-            url_list_html.append(f'<a href="{host_url}">📋Inventory</a>')
+        host_url = zabbix_host_link.format(
+            zabbix_server=zabbix_api_url.rstrip('/'),
+            hostid=data_zabbix.get('hostid', '0')
+        )
+        url_list_html.append(f'<a href="{host_url}">📋Inventory</a>')
         
         # Объединяем ссылки через пробел
         links = ' '.join(url_list_html) if url_list_html else ''
@@ -710,30 +688,7 @@ async def main_async():
                 graph_period = int(data_zabbix['graphs_period'])
             except ValueError:
                 pass
-        
-        # # Ссылки на графики
-        # url_list = []
-        # if trigger_url:
-        #     url_list.append(trigger_url)
-        # for item_id in set([x for x in data_zabbix.get('itemid', '').split() if re.search(r"\d+", x)]):
-        #     items_link = create_links_list(
-        #         _bool=data_zabbix.get('settings_graphlinks_bool') and body_messages_url_graphs,
-        #         url=zabbix_graph_link.format(
-        #             zabbix_server=zabbix_api_url.rstrip('/'),
-        #             itemid=item_id,
-        #             range_time=graph_period
-        #         ),
-        #         _type=body_messages_url_emoji_graphs
-        #     )
-        #     if items_link:
-        #         url_list.append(items_link)
-        # if event_url:
-        #     url_list.append(event_url)
-        # # if ack_url:
-        # #     url_list.append(ack_url)
-        # if host_url:
-        #     url_list.append(host_url)
-        
+
         # Формирование графиков
         graphs_png = None
         graphs_name = body_messages_title.format(
