@@ -1,0 +1,141 @@
+zabbix_export:
+  version: '7.0'
+  media_types:
+    - name: zbxTelegram
+      type: SCRIPT
+      script_name: zbxTelegram.py
+      parameters:
+        - sortorder: '0'
+          value: '{ALERT.SENDTO}'
+        - sortorder: '1'
+          value: '{ALERT.SUBJECT}'
+        - sortorder: '2'
+          value: '{ALERT.MESSAGE}'
+      description: 'Оповещение в telegram'
+      message_templates:
+        - event_source: TRIGGERS
+          operation_mode: PROBLEM
+          subject: '{Problem} {TRIGGER.SEVERITY} {{TRIGGER.SEVERITY}}: {EVENT.NAME}'
+          message: |
+            <?xml version="1.0" encoding="UTF-8" ?>
+            <root>
+            	<body>
+            		<messages>
+            <![CDATA[
+            Host: {HOST.HOST} [{HOST.IP}]
+            Last value: {ITEM.LASTVALUE1} ({TIME})
+            Duration: {EVENT.AGE}]]>
+            		</messages>
+            	</body>
+            	<settings>
+            		<graphs>True</graphs>
+            		<hostlinks>True</hostlinks>
+            		<graphlinks>True</graphlinks>
+            		<acklinks>True</acklinks>
+            		<eventlinks>True</eventlinks>
+            		<triggerlinks>True</triggerlinks>
+            		<eventtag>True</eventtag>
+            		<eventidtag>True</eventidtag>
+            		<itemidtag>True</itemidtag>
+            		<triggeridtag>True</triggeridtag>
+            		<actionidtag>True</actionidtag>
+            		<hostidtag>True</hostidtag>
+            		<zntsettingstag>True</zntsettingstag>
+            		<zntmentions>True</zntmentions>
+            		<keyboard>True</keyboard>
+            		<graphs_period>7200</graphs_period>
+            		<host>{HOST.HOST}</host>
+            		<itemid>{ITEM.ID1} {ITEM.ID2} {ITEM.ID3} {ITEM.ID4}</itemid>
+            		<triggerid>{TRIGGER.ID}</triggerid>
+            		<eventid>{EVENT.ID}</eventid>
+            		<actionid>{ACTION.ID}</actionid>
+            		<hostid>{HOST.ID}</hostid>
+            		<title><![CDATA[{HOST.HOST} - {EVENT.NAME}]]></title>
+            		<triggerurl><![CDATA[{TRIGGER.URL}]]></triggerurl>
+            		<eventtags><![CDATA[{EVENT.TAGS}]]></eventtags>
+            	</settings>
+            </root>
+        - event_source: TRIGGERS
+          operation_mode: RECOVERY
+          subject: '{Resolved} {TRIGGER.SEVERITY} {{TRIGGER.SEVERITY}} {EVENT.NAME}'
+          message: |
+            <?xml version="1.0" encoding="UTF-8" ?>
+            <root>
+            	<body>
+            		<messages>
+            <![CDATA[
+            Host: {HOST.HOST} [{HOST.IP}]
+            Last value: {ITEM.LASTVALUE1} ({TIME})
+            Duration: {EVENT.AGE}]]>
+            		</messages>
+            	</body>
+            	<settings>
+            		<graphs>True</graphs>
+            		<hostlinks>True</hostlinks>
+            		<graphlinks>True</graphlinks>
+            		<acklinks>True</acklinks>
+            		<eventlinks>True</eventlinks>
+            		<triggerlinks>True</triggerlinks>
+            		<eventtag>True</eventtag>
+            		<eventidtag>True</eventidtag>
+            		<itemidtag>True</itemidtag>
+            		<triggeridtag>True</triggeridtag>
+            		<actionidtag>True</actionidtag>
+            		<hostidtag>True</hostidtag>
+            		<zntsettingstag>True</zntsettingstag>
+            		<zntmentions>True</zntmentions>
+            		<keyboard>True</keyboard>
+            		<graphs_period>7200</graphs_period>
+            		<host>{HOST.HOST}</host>
+            		<itemid>{ITEM.ID1} {ITEM.ID2} {ITEM.ID3} {ITEM.ID4}</itemid>
+            		<triggerid>{TRIGGER.ID}</triggerid>
+            		<eventid>{EVENT.ID}</eventid>
+            		<actionid>{ACTION.ID}</actionid>
+            		<hostid>{HOST.ID}</hostid>
+            		<title><![CDATA[{HOST.HOST} - {EVENT.NAME}]]></title>
+            		<triggerurl><![CDATA[{TRIGGER.URL}]]></triggerurl>
+            		<eventtags><![CDATA[{EVENT.TAGS}]]></eventtags>
+            	</settings>
+            </root>
+        - event_source: TRIGGERS
+          operation_mode: UPDATE
+          subject: '{Update} {TRIGGER.SEVERITY} {{TRIGGER.SEVERITY}} {EVENT.NAME}'
+          message: |
+            <?xml version="1.0" encoding="UTF-8" ?>
+            <root>
+            	<body>
+            		<messages>
+            <![CDATA[
+            Host: {HOST.HOST} [{HOST.IP}]
+            Last value: {ITEM.LASTVALUE1} ({TIME})
+            Duration: {EVENT.AGE}]]>
+            		</messages>
+            	</body>
+            	<settings>
+            		<graphs>True</graphs>
+            		<hostlinks>True</hostlinks>
+            		<graphlinks>True</graphlinks>
+            		<acklinks>True</acklinks>
+            		<eventlinks>True</eventlinks>
+            		<triggerlinks>True</triggerlinks>
+            		<eventtag>True</eventtag>
+            		<eventidtag>True</eventidtag>
+            		<itemidtag>True</itemidtag>
+            		<triggeridtag>True</triggeridtag>
+            		<actionidtag>True</actionidtag>
+            		<hostidtag>True</hostidtag>
+            		<zntsettingstag>True</zntsettingstag>
+            		<zntmentions>True</zntmentions>
+            		<keyboard>True</keyboard>
+            		<graphs_period>7200</graphs_period>
+            		<host>{HOST.HOST}</host>
+            		<itemid>{ITEM.ID1} {ITEM.ID2} {ITEM.ID3} {ITEM.ID4}</itemid>
+            		<triggerid>{TRIGGER.ID}</triggerid>
+            		<eventid>{EVENT.ID}</eventid>
+            		<actionid>{ACTION.ID}</actionid>
+            		<hostid>{HOST.ID}</hostid>
+            		<title><![CDATA[{HOST.HOST} - {EVENT.NAME}]]></title>
+            		<triggerurl><![CDATA[{TRIGGER.URL}]]></triggerurl>
+            		<eventtags><![CDATA[{EVENT.TAGS}]]></eventtags>
+            	</settings>
+            </root>
