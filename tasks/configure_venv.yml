@@ -6,6 +6,8 @@
   command:
     cmd: "python3 -m venv {{ zbxtelegram_venv_dir }}"
     creates: "{{ zbxtelegram_venv_dir }}/bin/activate"
+  become: true
+  become_user: "{{ zbxtelegram_user }}"
 
 - name: 'configure_venv | Обновить pip в виртуальном окружении'
   tags:
@@ -14,6 +16,8 @@
   command:
     cmd: "{{ zbxtelegram_venv_dir }}/bin/pip install --upgrade pip setuptools wheel"
     creates: "{{ zbxtelegram_venv_dir }}/bin/pip3"
+  become: true
+  become_user: "{{ zbxtelegram_user }}"
 
 - name: 'configure_venv | Скопировать файл зависимостей'
   tags:
@@ -36,6 +40,12 @@
     requirements: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
     virtualenv: "{{ zbxtelegram_venv_dir }}"
     virtualenv_command: "python3 -m venv"
+  environment:
+    http_proxy: "{{ http_proxy | default('') }}"
+    https_proxy: "{{ https_proxy | default('') }}"
+    no_proxy: "{{ no_proxy | default('') }}"
+  become: true
+  become_user: "{{ zbxtelegram_user }}"
   register: pip_install
   until: pip_install is succeeded
 

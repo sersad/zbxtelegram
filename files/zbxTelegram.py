@@ -123,21 +123,21 @@ def xml_parsing(data):
             title=data['settings']['title'],
             message=message,
             eventtags=data['settings']['eventtags'],
-            settings_graphs_bool=eval(data['settings']['graphs'].capitalize()),
-            settings_graphlinks_bool=eval(data['settings']['graphlinks'].capitalize()),
-            settings_triggerlinks_bool=eval(data['settings']['triggerlinks'].capitalize()),
-            settings_hostlinks_bool=eval(data['settings']['hostlinks'].capitalize()),
-            settings_acklinks_bool=eval(data['settings']['acklinks'].capitalize()),
-            settings_eventlinks_bool=eval(data['settings']['eventlinks'].capitalize()),
-            settings_eventtag_bool=eval(data['settings']['eventtag'].capitalize()),
-            settings_eventidtag_bool=eval(data['settings']['eventidtag'].capitalize()),
-            settings_itemidtag_bool=eval(data['settings']['itemidtag'].capitalize()),
-            settings_triggeridtag_bool=eval(data['settings']['triggeridtag'].capitalize()),
-            settings_actionidtag_bool=eval(data['settings']['actionidtag'].capitalize()),
-            settings_hostidtag_bool=eval(data['settings']['hostidtag'].capitalize()),
-            settings_zntsettingstag_bool=eval(data['settings']['zntsettingstag'].capitalize()),
-            settings_zntmentions_bool=eval(data['settings']['zntmentions'].capitalize()),
-            settings_keyboard_bool=eval(data['settings']['keyboard'].capitalize()),
+            settings_graphs_bool=bool(data['settings']['graphs'].capitalize()),
+            settings_graphlinks_bool=bool(data['settings']['graphlinks'].capitalize()),
+            settings_triggerlinks_bool=bool(data['settings']['triggerlinks'].capitalize()),
+            settings_hostlinks_bool=bool(data['settings']['hostlinks'].capitalize()),
+            settings_acklinks_bool=bool(data['settings']['acklinks'].capitalize()),
+            settings_eventlinks_bool=bool(data['settings']['eventlinks'].capitalize()),
+            settings_eventtag_bool=bool(data['settings']['eventtag'].capitalize()),
+            settings_eventidtag_bool=bool(data['settings']['eventidtag'].capitalize()),
+            settings_itemidtag_bool=bool(data['settings']['itemidtag'].capitalize()),
+            settings_triggeridtag_bool=bool(data['settings']['triggeridtag'].capitalize()),
+            settings_actionidtag_bool=bool(data['settings']['actionidtag'].capitalize()),
+            settings_hostidtag_bool=bool(data['settings']['hostidtag'].capitalize()),
+            settings_zntsettingstag_bool=bool(data['settings']['zntsettingstag'].capitalize()),
+            settings_zntmentions_bool=bool(data['settings']['zntmentions'].capitalize()),
+            settings_keyboard_bool=bool(data['settings']['keyboard'].capitalize()),
             graphs_period=data['settings']['graphs_period'],
             host=data['settings']['host'],
             itemid=data['settings']['itemid'],
@@ -436,17 +436,6 @@ async def send_messages(
         # Случай 1: список медиа (несколько графиков)
         if isinstance(media_data, list) and media_data:
             try:
-                # Отправляем ПЕРВЫЙ график с кнопками
-                first_photo = media_data[0]
-                await bot.send_photo(
-                    chat_id=sent_id,
-                    photo=first_photo.media,
-                    caption=first_photo.caption or message,
-                    parse_mode="HTML",
-                    reply_markup=gen_markup(eventid, itemid) if zabbix_keyboard and settings_keyboard else None,
-                    disable_notification=disable_notification
-                )
-                
                 # Отправляем остальные графики БЕЗ кнопок
                 if len(media_data) > 1:
                     remaining_media = media_data[1:]
@@ -460,7 +449,16 @@ async def send_messages(
                         media=remaining_media,
                         disable_notification=disable_notification
                     )
-                
+                # Отправляем ПЕРВЫЙ график с кнопками
+                first_photo = media_data[0]
+                await bot.send_photo(
+                    chat_id=sent_id,
+                    photo=first_photo.media,
+                    caption=first_photo.caption or message,
+                    parse_mode="HTML",
+                    reply_markup=gen_markup(eventid, itemid) if zabbix_keyboard and settings_keyboard else None,
+                    disable_notification=disable_notification
+                )
                 if loggings:
                     me = await bot.me()
                     loggings.info(f'Bot @{me.username}({me.id}) sent 1 photo with buttons + {len(media_data)-1} additional graphs to "{sent_to}" ({sent_id}).')
