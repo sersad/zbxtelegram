@@ -40,10 +40,11 @@
     requirements: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
     virtualenv: "{{ zbxtelegram_venv_dir }}"
     virtualenv_command: "python3 -m venv"
-  environment:
-    http_proxy: "{{ http_proxy | default('') }}"
-    https_proxy: "{{ https_proxy | default('') }}"
-    no_proxy: "{{ no_proxy | default('') }}"
+    extra_args: "--no-cache-dir --disable-pip-version-check --proxy {{ http_proxy | default('') }}"
+  # environment:
+  #   http_proxy: "{{ http_proxy | default('') }}"
+  #   https_proxy: "{{ https_proxy | default('') }}"
+  #   no_proxy: "{{ no_proxy | default('') }}"
   become: true
   become_user: "{{ zbxtelegram_user }}"
   register: pip_install

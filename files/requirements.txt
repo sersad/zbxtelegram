@@ -1,3 +1,13 @@
 aiogram>=3.0.0
 aiozabbix>=1.0.0
 aiohttp>=3.8.0
+aiohttp_socks==0.11.0
+# requests==2.32.5
+# urllib3==2.6.3
+# pillow==12.1.0
+# PySocks==1.7.1
+# xmltodict==1.0.2
+# python-socks[asyncio]==2.8.0
+# pydantic==2.8.2
+# pydantic_core==2.20.1
+
