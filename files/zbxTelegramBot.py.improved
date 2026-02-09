@@ -1,0 +1,575 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Zabbix Notification Telegram Bot
+https://github.com/asand3r/zbxTelegram.git
+"""
+import argparse
+import asyncio
+import json
+import logging
+import os
+import ssl
+import sys
+from configparser import ConfigParser
+from datetime import datetime
+from html import escape
+from io import BytesIO
+from urllib.parse import quote_plus
+
+# Try to import configuration
+try:
+    from zbxTelegram_config import *
+except ImportError:
+    # Fallback to environment variables or defaults
+    tg_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    tg_proxy = os.environ.get('TELEGRAM_PROXY', 'False').lower() == 'true'
+    tg_proxy_server = os.environ.get('TELEGRAM_PROXY_SERVER', '')
+    zabbix_api_url = os.environ.get('ZABBIX_API_URL', '')
+    zabbix_api_login = os.environ.get('ZABBIX_API_USER', '')
+    zabbix_api_pass = os.environ.get('ZABBIX_API_PASS', '')
+    config_log_file = os.environ.get('LOG_FILE', '/var/log/zabbix/znt.log')
+    config_cache_file = os.environ.get('CACHE_FILE', '/var/cache/zabbix/cache.json')
+    config_debug_mode = os.environ.get('DEBUG_MODE', 'False').lower() == 'true'
+    config_verify_ssl = os.environ.get('VERIFY_SSL', 'True').lower() == 'true'
+    config_zabbix_timeout = int(os.environ.get('ZABBIX_TIMEOUT', '30'))
+    config_telegram_timeout = int(os.environ.get('TELEGRAM_TIMEOUT', '10'))
+    config_acknowledge_timeout = int(os.environ.get('ACKNOWLEDGE_TIMEOUT', '180'))
+
+# Configure SSL context based on config
+if not config_verify_ssl:
+    # Only disable SSL verification if explicitly configured to do so
+    # This is a security risk and should not be used in production
+    import warnings
+    warnings.warn("SSL verification is disabled. This is a security risk.", Warning)
+    ssl._create_default_https_context = ssl._create_unverified_context
+
+# Configure logging
+logger = logging.getLogger("znt.bot")
+logger.setLevel(logging.DEBUG if config_debug_mode else logging.INFO)
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Add file handler if log file is configured
+if config_log_file:
+    try:
+        file_handler = logging.FileHandler(filename=config_log_file, mode='a')
+        file_handler.setLevel(logging.DEBUG if config_debug_mode else logging.INFO)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except Exception as e:
+        logger.error(f"Cannot write to log file {config_log_file}: {e}")
+
+# Add console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG if config_debug_mode else logging.INFO)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# Import required libraries with error handling
+try:
+    from aiogram import Bot, Dispatcher
+    from aiogram.types import (
+        CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, 
+        InputMediaPhoto, BufferedInputFile, Message
+    )
+    from aiogram.filters import Filter
+    from aiogram.client.session.aiohttp import AiohttpSession
+    from aiozabbix import ZabbixAPI, ZabbixAPIException
+    import aiohttp
+    from aiogram.fsm.state import State, StatesGroup
+    from aiogram.fsm.context import FSMContext
+    from aiogram.fsm.storage.memory import MemoryStorage
+except ImportError as e:
+    logger.error(f"Missing required dependencies: {e}")
+    logger.error("Please install required packages: pip install aiogram aiozabbix")
+    sys.exit(1)
+
+# Global variables from config
+tgProxy = tg_proxy
+tgProxyServer = tg_proxy_server if tg_proxy else None
+
+# Zabbix settings
+zbxApiUrl = zabbix_api_url
+zbxApiUser = zabbix_api_login
+zbxApiPass = zabbix_api_pass
+
+# Graph settings
+zbxGraph = True
+zbxGraphPeriodDefault = 3600
+
+# Messages format
+body_messages = "<b>{subject}</b>{body}{links}{tags}{mentions}"
+body_messages_max_symbol = 1200
+body_messages_cut_symbol = True
+
+# Trigger settings tags
+trigger_settings_tag = "ZNTSettings"
+trigger_settings_tag_no_alert = "no_alert"
+trigger_settings_tag_not_notify = "not_notify"
+trigger_settings_tag_no_graph = "no_graph"
+trigger_settings_tag_graph_period = "graphs_period"
+
+# Trigger mentions tag
+trigger_info_mentions_tag = "mentions"
+
+# Zabbix links
+zabbix_host_link = "{zabbix_server}/hostinventories.php?hostid={hostid}"
+zabbix_graph_link = "{zabbix_server}/history.php?action=showgraph&itemids[]={itemid}&period={range_time}"
+zabbix_event_link = "{zabbix_server}/tr_events.php?triggerid={triggerid}&eventid={eventid}"
+
+# Status emoji mapping
+zabbix_status_emoji_map = {
+    "Problem": "🚨",
+    "Resolved": "✅",
+    "Update": "🚧",
+    "Not classified": "⁉️",
+    "Information": "💙",
+    "Warning": "💛",
+    "Average": "🧡",
+    "High": "❤️",
+    "Disaster": "💔",
+    "Test": "🚽💩"
+}
+
+class ZNTCallbackData(Filter):
+    """Filter for ZNT callback data"""
+    async def __call__(self, callback: CallbackQuery) -> bool:
+        # Validate callback data
+        if not callback.data:
+            return False
+        
+        # Check if callback data starts with 'znt_'
+        return callback.data.startswith('znt_')
+
+class ZNTStates(StatesGroup):
+    """States for ZNT bot"""
+    waiting_for_acknowledge = State()
+
+def validate_input(data):
+    """Validate and sanitize input data"""
+    if not data:
+        return ""
+    
+    # Limit input size
+    if len(str(data)) > 4096:
+        logger.warning("Input data exceeds maximum size limit")
+        return str(data)[:4096]
+    
+    # Basic sanitization
+    sanitized = str(data).strip()
+    return sanitized
+
+async def get_zabbix_auth():
+    """Authenticate with Zabbix API"""
+    try:
+        zapi = ZabbixAPI(zbxApiUrl)
+        await zapi.login(zbxApiUser, zbxApiPass)
+        return zapi
+    except ZabbixAPIException as e:
+        logger.error(f"Zabbix authentication failed: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error authenticating with Zabbix API: {e}")
+        return None
+
+async def get_zabbix_event_info(zapi, eventid):
+    """Get event information from Zabbix"""
+    try:
+        events = await zapi.event.get(
+            eventids=eventid,
+            output='extend',
+            selectHosts=['hostid', 'host', 'name'],
+            selectRelatedObject=['itemid', 'name', 'key_']
+        )
+        
+        if events:
+            return events[0]
+        else:
+            return None
+    except ZabbixAPIException as e:
+        logger.error(f"Zabbix API error getting event info: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting Zabbix event info: {e}")
+        return None
+
+async def acknowledge_event(zapi, eventid, message):
+    """Acknowledge event in Zabbix"""
+    try:
+        result = await zapi.event.acknowledge(
+            eventids=eventid,
+            message=message,
+            action=6  # Add message and close problem
+        )
+        return result
+    except ZabbixAPIException as e:
+        logger.error(f"Zabbix API error acknowledging event: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error acknowledging event: {e}")
+        return None
+
+def generate_keyboard(eventid, triggerid):
+    """Generate inline keyboard for event actions"""
+    try:
+        # Validate inputs
+        if not eventid or not triggerid:
+            return None
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Подтвердить",
+                    callback_data=f"znt_ack_{eventid}"
+                ),
+                InlineKeyboardButton(
+                    text="📈 График",
+                    callback_data=f"znt_graph_{eventid}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📋 Детали",
+                    callback_data=f"znt_details_{eventid}"
+                ),
+                InlineKeyboardButton(
+                    text="🔇 Теги",
+                    callback_data=f"znt_tags_{eventid}"
+                )
+            ]
+        ])
+        
+        return keyboard
+    except Exception as e:
+        logger.error(f"Error generating keyboard: {e}")
+        return None
+
+async def send_telegram_message(bot, chat_id, message, photo=None, keyboard=None):
+    """Send message to Telegram chat"""
+    try:
+        # Validate inputs
+        chat_id = validate_input(chat_id)
+        message = validate_input(message)
+        
+        if not chat_id or not message:
+            logger.error("Chat ID and message are required")
+            return None
+        
+        # Escape HTML characters
+        message = escape(message)
+        
+        # Truncate message if too long
+        if len(message) > body_messages_max_symbol and body_messages_cut_symbol:
+            message = message[:body_messages_max_symbol] + "..."
+        
+        # Send message with or without photo
+        if photo:
+            # Send photo with caption
+            result = await bot.send_photo(
+                chat_id=chat_id,
+                photo=BufferedInputFile(photo, filename="graph.png"),
+                caption=message,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        else:
+            # Send text message
+            result = await bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        
+        logger.debug(f"Telegram message sent: {result.message_id}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error sending Telegram message: {e}")
+        return None
+
+async def generate_graph(zapi, itemid, period=zbxGraphPeriodDefault):
+    """Generate graph from Zabbix"""
+    try:
+        # Validate inputs
+        if not itemid:
+            logger.warning("Item ID is required for graph generation")
+            return None
+        
+        # Convert period to integer
+        period = int(period) if str(period).isdigit() else zbxGraphPeriodDefault
+        
+        # Generate graph using Zabbix API
+        graph_data = await zapi.graph.get(
+            itemids=[itemid],
+            period=period
+        )
+        
+        return graph_data
+    except ZabbixAPIException as e:
+        logger.error(f"Zabbix API error generating graph: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error generating graph: {e}")
+        return None
+
+async def handle_acknowledge_callback(bot: Bot, callback_query: CallbackQuery, state: FSMContext):
+    """Handle acknowledge callback"""
+    try:
+        # Extract event ID from callback data
+        eventid = callback_query.data.split('_')[2] if len(callback_query.data.split('_')) > 2 else None
+        
+        if not eventid:
+            await callback_query.answer("Ошибка: не удалось получить ID события")
+            return
+        
+        # Set state to waiting for acknowledge message
+        await state.set_state(ZNTStates.waiting_for_acknowledge)
+        await state.update_data(eventid=eventid)
+        
+        # Ask user for acknowledge message
+        await callback_query.message.reply(
+            "Пожалуйста, введите комментарий для подтверждения события:"
+        )
+        await callback_query.answer()
+        
+    except Exception as e:
+        logger.error(f"Error handling acknowledge callback: {e}")
+        await callback_query.answer("Ошибка обработки запроса")
+
+async def handle_graph_callback(bot: Bot, callback_query: CallbackQuery):
+    """Handle graph callback"""
+    try:
+        # Extract event ID from callback data
+        eventid = callback_query.data.split('_')[2] if len(callback_query.data.split('_')) > 2 else None
+        
+        if not eventid:
+            await callback_query.answer("Ошибка: не удалось получить ID события")
+            return
+        
+        # Authenticate with Zabbix
+        zapi = await get_zabbix_auth()
+        if not zapi:
+            await callback_query.answer("Ошибка аутентификации в Zabbix")
+            return
+        
+        # Get event information
+        event = await get_zabbix_event_info(zapi, eventid)
+        if not event:
+            await callback_query.answer("Ошибка получения информации о событии")
+            return
+        
+        # Get item ID from event
+        itemid = event.get('relatedObject', {}).get('itemid') if event.get('relatedObject') else None
+        if not itemid:
+            await callback_query.answer("Ошибка: не удалось получить ID элемента данных")
+            return
+        
+        # Generate graph
+        # Note: This is a simplified implementation
+        # In a real implementation, you would need to generate the actual graph image
+        graph_url = f"{zbxApiUrl}/chart3.php?itemids[]={itemid}&period={zbxGraphPeriodDefault}"
+        
+        # Send graph URL as message
+        await callback_query.message.reply(
+            f"График для события:\n{graph_url}"
+        )
+        await callback_query.answer("График отправлен")
+        
+    except Exception as e:
+        logger.error(f"Error handling graph callback: {e}")
+        await callback_query.answer("Ошибка обработки запроса")
+
+async def handle_details_callback(bot: Bot, callback_query: CallbackQuery):
+    """Handle details callback"""
+    try:
+        # Extract event ID from callback data
+        eventid = callback_query.data.split('_')[2] if len(callback_query.data.split('_')) > 2 else None
+        
+        if not eventid:
+            await callback_query.answer("Ошибка: не удалось получить ID события")
+            return
+        
+        # Authenticate with Zabbix
+        zapi = await get_zabbix_auth()
+        if not zapi:
+            await callback_query.answer("Ошибка аутентификации в Zabbix")
+            return
+        
+        # Get event information
+        event = await get_zabbix_event_info(zapi, eventid)
+        if not event:
+            await callback_query.answer("Ошибка получения информации о событии")
+            return
+        
+        # Format event details
+        details = f"<b>Детали события</b>\n"
+        details += f"ID события: {event.get('eventid', 'N/A')}\n"
+        details += f"Статус: {event.get('value', 'N/A')}\n"
+        details += f"Важность: {event.get('severity', 'N/A')}\n"
+        details += f"Время: {event.get('clock', 'N/A')}\n"
+        
+        # Add host information if available
+        if event.get('hosts'):
+            host = event['hosts'][0]
+            details += f"Хост: {host.get('host', 'N/A')}\n"
+        
+        # Send details
+        await callback_query.message.reply(details, parse_mode="HTML")
+        await callback_query.answer("Детали отправлены")
+        
+    except Exception as e:
+        logger.error(f"Error handling details callback: {e}")
+        await callback_query.answer("Ошибка обработки запроса")
+
+async def handle_tags_callback(bot: Bot, callback_query: CallbackQuery):
+    """Handle tags callback"""
+    try:
+        # Extract event ID from callback data
+        eventid = callback_query.data.split('_')[2] if len(callback_query.data.split('_')) > 2 else None
+        
+        if not eventid:
+            await callback_query.answer("Ошибка: не удалось получить ID события")
+            return
+        
+        # Authenticate with Zabbix
+        zapi = await get_zabbix_auth()
+        if not zapi:
+            await callback_query.answer("Ошибка аутентификации в Zabbix")
+            return
+        
+        # Get event information with tags
+        events = await zapi.event.get(
+            eventids=eventid,
+            output='extend',
+            selectTags='extend'
+        )
+        
+        if not events:
+            await callback_query.answer("Ошибка получения информации о событии")
+            return
+        
+        event = events[0]
+        
+        # Format tags
+        if event.get('tags'):
+            tags_text = "<b>Теги события</b>\n"
+            for tag in event['tags']:
+                tags_text += f"{tag.get('tag', 'N/A')}: {tag.get('value', 'N/A')}\n"
+        else:
+            tags_text = "Нет тегов для этого события"
+        
+        # Send tags
+        await callback_query.message.reply(tags_text, parse_mode="HTML")
+        await callback_query.answer("Теги отправлены")
+        
+    except Exception as e:
+        logger.error(f"Error handling tags callback: {e}")
+        await callback_query.answer("Ошибка обработки запроса")
+
+async def handle_message(bot: Bot, message: Message, state: FSMContext):
+    """Handle incoming messages"""
+    try:
+        # Check if we're waiting for an acknowledge message
+        current_state = await state.get_state()
+        if current_state == ZNTStates.waiting_for_acknowledge:
+            # Get event ID from state
+            user_data = await state.get_data()
+            eventid = user_data.get('eventid')
+            
+            if not eventid:
+                await message.reply("Ошибка: не удалось получить ID события")
+                await state.clear()
+                return
+            
+            # Get acknowledge message
+            ack_message = message.text
+            if not ack_message:
+                await message.reply("Пожалуйста, введите текст комментария")
+                return
+            
+            # Authenticate with Zabbix
+            zapi = await get_zabbix_auth()
+            if not zapi:
+                await message.reply("Ошибка аутентификации в Zabbix")
+                await state.clear()
+                return
+            
+            # Acknowledge event
+            result = await acknowledge_event(zapi, eventid, ack_message)
+            if result:
+                await message.reply("Событие успешно подтверждено!")
+            else:
+                await message.reply("Ошибка подтверждения события")
+            
+            # Clear state
+            await state.clear()
+        
+    except Exception as e:
+        logger.error(f"Error handling message: {e}")
+        await message.reply("Ошибка обработки сообщения")
+
+async def main():
+    """Main function"""
+    try:
+        # Validate required configuration
+        if not tg_token:
+            logger.error("Telegram bot token is required")
+            sys.exit(1)
+        
+        # Configure proxy if needed
+        session = None
+        if tgProxy and tgProxyServer:
+            # Create session with proxy
+            session = AiohttpSession(proxy=tgProxyServer)
+        
+        # Initialize bot and dispatcher
+        bot = Bot(token=tg_token, session=session)
+        storage = MemoryStorage()
+        dp = Dispatcher(storage=storage)
+        
+        # Register handlers
+        dp.callback_query.register(
+            handle_acknowledge_callback,
+            lambda c: c.data.startswith('znt_ack_')
+        )
+        
+        dp.callback_query.register(
+            handle_graph_callback,
+            lambda c: c.data.startswith('znt_graph_')
+        )
+        
+        dp.callback_query.register(
+            handle_details_callback,
+            lambda c: c.data.startswith('znt_details_')
+        )
+        
+        dp.callback_query.register(
+            handle_tags_callback,
+            lambda c: c.data.startswith('znt_tags_')
+        )
+        
+        dp.message.register(handle_message)
+        
+        # Start polling
+        logger.info("Starting ZNT bot...")
+        await dp.start_polling(bot)
+        
+    except Exception as e:
+        logger.error(f"Error in main function: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Zabbix Notification Telegram Bot')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    args = parser.parse_args()
+    
+    # Set debug mode if requested
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+    
+    # Run main function
+    asyncio.run(main())
