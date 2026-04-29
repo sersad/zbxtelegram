@@ -46,7 +46,7 @@
     mode: "0644"
   loop:
     - __init__.py
-    - ArialMT.ttf
+    - OpenSans-Regular.ttf
     - error_send_photo.png
     - test.png
   notify: Restart zbxtelegrambot

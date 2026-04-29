@@ -68,7 +68,7 @@ zbxtelegram_zabbix_pass: ""  # Required: bot user password
 ```yaml
 zbxtelegram_keyboard_enabled: true
 zbxtelegram_watermark_enabled: true
-zbxtelegram_watermark_font: "{{ zbxtelegram_alertscripts_dir }}/zbxTelegram_files/ArialMT.ttf"
+zbxtelegram_watermark_font: "{{ zbxtelegram_alertscripts_dir }}/zbxTelegram_files/OpenSans-Regular.ttf"
 zbxtelegram_watermark_label: "Только для внутреннего использования"
 zbxtelegram_graph_period_default: 10800  # 3 hours
 ```

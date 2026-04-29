@@ -27,14 +27,15 @@ ssl._create_default_https_context = ssl._create_unverified_context
 # Aiogram компоненты
 from aiogram import Bot
 from aiogram.types import (
-    InlineKeyboardMarkup, 
-    InlineKeyboardButton, 
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
     InputMediaPhoto,
     BufferedInputFile
 )
 
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramAPIError
+from aiogram.client.telegram import TelegramAPIServer
 
 # XML обработка
 import xmltodict
@@ -53,6 +54,7 @@ from urllib3.util.ssl_ import create_urllib3_context
 from urllib3.exceptions import InsecureRequestWarning
 
 urllib3.disable_warnings(InsecureRequestWarning)
+
 
 # SSL адаптер для requests (для get_cookie и get_chart_png)
 class SSLAdapter(HTTPAdapter):
@@ -76,11 +78,11 @@ class System:
         )
         self.log = logging.getLogger()
         self.log.setLevel(self.log_level)
-        
+
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setLevel(self.log_level)
         stdout_handler.setFormatter(log_format)
-        
+
         try:
             file_handler = logging.FileHandler(filename=config_log_file, mode='a')
             file_handler.setLevel(self.log_level)
@@ -88,15 +90,15 @@ class System:
             self.log.addHandler(file_handler)
         except PermissionError as e:
             print(f"Cannot write to log file {config_log_file}: {e}", file=sys.stderr)
-        
+
         self.log.addHandler(stdout_handler)
 
 class ArgParsing:
     def create_parser(self):
         parser = argparse.ArgumentParser(
-            prog='znt',
+            prog='zbxTelegram',
             description='Скрипт для отправки Zabbix нотификаций в Telegram',
-            epilog='(c) Dmitry Sokolov 2019 @ https://github.com/xxsokolov/',
+            epilog='(c) SS 2026',
             add_help=False,
             formatter_class=RawTextHelpFormatter
         )
@@ -199,7 +201,7 @@ def get_chart_png(itemid, graff_name, period=None):
         cookies = get_cookie()
         if not cookies:
             return None
-        
+
         response = session.get(
             zabbix_graph_chart.format(
                 name=graff_name,
@@ -212,13 +214,13 @@ def get_chart_png(itemid, graff_name, period=None):
             timeout=10
         )
         response.raise_for_status()
-        
+
         img_data = response.content
         if watermark and img_data:  # ← ИСПРАВЛЕНО: было `img_`
             wmt = watermark_text(img_data)
             if wmt:
                 img_data = wmt
-        
+
         return dict(img=img_data, url=response.url)
     except Exception as err:
         if loggings:
@@ -301,17 +303,17 @@ def set_cache(title, send_id, sent_type, cache=None, update=None):
                 cache = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             cache = {}
-        
+
         cache[title] = {
             'type': str(sent_type),
             'id': str(send_id),
             **({'old': str(update)} if update else {})
         }
-        
+
         os.makedirs(os.path.dirname(config_cache_file), exist_ok=True)
         with open(config_cache_file, 'w') as f:
             json.dump(cache, f, sort_keys=True, ensure_ascii=False, indent=4)
-        
+
         if loggings:
             if update:
                 loggings.info(f"Updated id for {title} ({sent_type}): old '{update}' -> new '{send_id}' in cache file")
@@ -349,11 +351,11 @@ def gen_markup(eventid, itemid=None):
     # if itemid and re.search(r'\d+', itemid):
     #     clean_itemid = re.search(r'\d+', itemid).group()
     #     buttons.append(InlineKeyboardButton(text="📊", callback_data=f"g:{eventid}:{clean_itemid}"))
-    
+
     # Защита от отсутствия переменной в конфигурации
     row_width = getattr(sys.modules[__name__], 'zabbix_keyboard_row_width', 5)
     rows = [buttons[i:i+row_width] for i in range(0, len(buttons), row_width)]
-    
+
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -364,25 +366,25 @@ async def get_send_id(bot: Bot, send_to: str) -> int:
         # Прямой числовой ID
         if re.fullmatch(r'-?\d+', send_to):
             return int(send_to)
-        
+
         # Имя пользователя (@username)
         if send_to.startswith('@'):
             send_to = send_to[1:]
-        
+
         # Проверка кэша
         send_id = get_cache(send_to)
         if send_id:
             return int(send_id)
-        
+
         if loggings:
             loggings.info("Telegram API: method getUpdates: started")
-        
+
         # Получаем обновления для поиска чата
         updates = await bot.get_updates(timeout=10)
         while len(updates) >= 100:
             last_id = max(u.update_id for u in updates)
             updates = await bot.get_updates(timeout=10, offset=last_id + 1)
-        
+
         for update in updates:
             chat = None
             if update.message:
@@ -391,24 +393,24 @@ async def get_send_id(bot: Bot, send_to: str) -> int:
                 chat = update.edited_message.chat
             elif update.channel_post:
                 chat = update.channel_post.chat
-            
+
             if not chat:
                 continue
-            
+
             # Поиск по названию чата/канала
             if chat.type in ["group", "supergroup", "channel"] and chat.title == send_to:
                 set_cache(send_to, chat.id, chat.type)
                 await bot.get_updates(offset=-1)
                 return chat.id
-            
+
             # Поиск по имени пользователя
             if chat.type == "private" and chat.username and chat.username.lower() == send_to.lower():
                 set_cache(send_to, chat.id, chat.type)
                 await bot.get_updates(offset=-1)
                 return chat.id
-        
+
         raise ValueError(f'Username/group "{send_to}" not found. Add bot to group or send message to bot first.')
-    
+
     except Exception as err:
         if loggings:
             loggings.error(f"Exception in get_send_id: {err}", exc_info=config_exc_info)
@@ -442,7 +444,7 @@ async def send_messages(
                     for m in remaining_media:
                         m.caption = None
                         m.parse_mode = None
-                    
+
                     # ВАЖНО: НЕТ reply_markup в send_media_group!
                     await bot.send_media_group(
                         chat_id=sent_id,
@@ -463,7 +465,7 @@ async def send_messages(
                     me = await bot.me()
                     loggings.info(f'Bot @{me.username}({me.id}) sent 1 photo with buttons + {len(media_data)-1} additional graphs to "{sent_to}" ({sent_id}).')
                 sys.exit(0)
-                
+
             except TelegramAPIError as err:
                 if hasattr(err, 'migrate_to_chat_id') and getattr(err, 'migrate_to_chat_id', None):
                     if loggings:
@@ -533,26 +535,32 @@ async def send_messages(
 # ==================== ОСНОВНАЯ АСИНХРОННАЯ ФУНКЦИЯ ====================
 async def main_async():
     global loggings
-    
+
     # Парсинг аргументов
     args = ArgParsing().create_parser().parse_args(sys.argv[1:])
     loggings = System(config_debug_mode if not args.debug else True).log
-    
+
     if loggings:
         loggings.info(f"Send to {args.username} action: {args.subject}")
         loggings.debug(f"sys.argv: {sys.argv[1:]}")
-    
+
     # Настройка прокси (без кастомных коннекторов!)
     proxy_url = None
     if tg_proxy and tg_proxy_server:
         proxy_url = tg_proxy_server if isinstance(tg_proxy_server, str) else next(iter(tg_proxy_server.values()))
         if loggings:
             loggings.info(f"Using proxy for Telegram API: {proxy_url}")
-    
-    # Создаём сессию БЕЗ кастомного коннектора (SSL отключён глобально)
-    bot_session = AiohttpSession(proxy=proxy_url) if proxy_url else AiohttpSession()
+
+    # Настройка local_server api
+    if tg_server_api:
+        local_server = TelegramAPIServer.from_base(tg_server_api)
+        # Создаём сессию БЕЗ кастомного коннектора (SSL отключён глобально) Создайте сессию с этим сервером
+        bot_session = AiohttpSession(proxy=proxy_url, api=local_server) if proxy_url else AiohttpSession(api=local_server)
+    else:
+        # Создаём сессию БЕЗ кастомного коннектора (SSL отключён глобально)
+        bot_session = AiohttpSession(proxy=proxy_url) if proxy_url else AiohttpSession()
     bot = Bot(token=args.token if args.token else tg_token, session=bot_session)
-    
+
     try:
         # Тестовый режим
         if args.subject in ['Test subject', 'test', 'Тестовая тема'] or args.messages in \
@@ -565,7 +573,7 @@ async def main_async():
             else:
                 test_graph_file = f'{os.path.dirname(os.path.realpath(__file__))}/zbxTelegram_files/error_send_photo.png'
                 error_code = 1
-            
+
             try:
                 with open(test_graph_file, 'rb') as f:
                     img_data = f.read()
@@ -573,7 +581,7 @@ async def main_async():
                 if loggings:
                     loggings.error(f"Test image not found: {test_graph_file}")
                 sys.exit(1)
-            
+
             await send_messages(
                 bot=bot,
                 sent_to=args.username,
@@ -590,10 +598,10 @@ async def main_async():
                 disable_notification=False
             )
             sys.exit(error_code)
-        
+
         # Основной режим: парсинг XML
         data_zabbix = xml_parsing(args.messages)
-        
+
         # Формирование тегов
         event_tags = create_tags_list(
             _bool=data_zabbix.get('settings_eventtag_bool') and body_messages_tags_event,
@@ -633,13 +641,13 @@ async def main_async():
             _bool=data_zabbix.get('settings_zntmentions_bool') and body_messages_mentions_settings,
             mentions=data_zabbix['eventtags']
         )
-        
+
         # Период графика (без изменений)
         graph_period = zabbix_graph_period_default
 
         # === ИСПРАВЛЕНО: ФОРМИРОВАНИЕ КОРОТКИХ ССЫЛОК В ФОРМАТЕ HTML ===
         url_list_html = []
-        
+
         # Графики
         graph_index = 1
         for item_id in set([x for x in data_zabbix.get('itemid', '').split() if re.search(r"\d+", x)]):
@@ -650,7 +658,7 @@ async def main_async():
             )
             url_list_html.append(f'<a href="{graph_url}">📊{item_id.strip()}</a>')
             graph_index += 1
-        
+
         # Событие
         event_url = zabbix_event_link.format(
             zabbix_server=zabbix_api_url.rstrip('/'),
@@ -658,19 +666,19 @@ async def main_async():
             triggerid=data_zabbix.get('triggerid', '0')
         )
         url_list_html.append(f'<a href="{event_url}">🔍Event</a>')
-       
+
         # Хост (инвентарные данные)
         host_url = zabbix_host_link.format(
             zabbix_server=zabbix_api_url.rstrip('/'),
             hostid=data_zabbix.get('hostid', '0')
         )
         url_list_html.append(f'<a href="{host_url}">📋Inventory</a>')
-        
+
         # Объединяем ссылки через пробел
         links = ' '.join(url_list_html) if url_list_html else ''
-        
 
-        
+
+
         if isinstance(zntsettings_tags, dict) and trigger_settings_tag_graph_period in ' '.join(zntsettings_tags.get(trigger_settings_tag, [])):
             try:
                 for setting in zntsettings_tags.get(trigger_settings_tag, []):
@@ -680,7 +688,7 @@ async def main_async():
             except Exception as e:
                 if loggings:
                     loggings.warning(f"Graph period parsing failed: {e}")
-        
+
         if data_zabbix['graphs_period'] != 'default':
             try:
                 graph_period = int(data_zabbix['graphs_period'])
@@ -722,12 +730,12 @@ async def main_async():
             body = body[:body_messages_max_symbol] + f' <a href="{zabbix_event_link.format(zabbix_server=zabbix_api_url.rstrip("/"), eventid=data_zabbix.get("eventid"), triggerid=data_zabbix.get("triggerid"))}">...</a>'
         else:
             truncated = False
-        
+
         # links = body_messages_url_delimiter.join(url_list) if body_messages_url and url_list else ''
         tags_list = [t for t in [event_tags, eventid_tags, itemid_tags, triggerid_tags, actionid_tags, hostid_tags] if t and t != body_messages_tags_no]
         tags = body_messages_tags_delimiter.join(tags_list) if body_messages_tags and tags_list else ''
         mentions_text = ' '.join(mentions) if mentions and body_messages_mentions_settings else ''
-        
+
         message = body_messages.format(
             subject=subject,
             body=f'\n\n{body}' if body else '',
@@ -735,7 +743,7 @@ async def main_async():
             tags=f'\n\n{tags}' if tags else '',
             mentions=f'\n\n{mentions_text}' if mentions_text else ''
         )
-        
+
         # Отправка сообщения
         await send_messages(
             bot=bot,
@@ -747,7 +755,7 @@ async def main_async():
             settings_keyboard=data_zabbix.get('settings_keyboard_bool'),
             disable_notification=False
         )
-    
+
     finally:
         await bot_session.close()
 

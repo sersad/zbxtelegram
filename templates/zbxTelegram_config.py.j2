@@ -5,6 +5,7 @@
 # Telegram
 tg_token = "{{ zbxtelegram_bot_token }}"
 tg_proxy = {% if zbxtelegram_proxy_enabled %}True{% else %}False{% endif %}
+tg_server_api = "{{ zbxtelegram_server_api }}"
 
 {% if zbxtelegram_proxy_enabled %}
 tg_proxy_server = "{{ zbxtelegram_proxy_url }}"
@@ -19,7 +20,7 @@ zabbix_api_pass = "{{ zbxtelegram_zabbix_pass }}"
 
 # Paths
 config_log_file = "{{ zbxtelegram_log_dir }}/znt.log"
-#### TODO: cache.json -> id.cache 
+#### TODO: cache.json -> id.cache
 config_cache_file = "{{ zbxtelegram_cache_dir }}/cache.json"
 config_debug_mode = {% if zbxtelegram_debug_enabled %}True{% else %}False{% endif %}
 

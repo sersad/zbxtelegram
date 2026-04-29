@@ -18,6 +18,7 @@ zbxtelegram_bot_token: ""  # Обязательно: ваш токен бота
 zbxtelegram_proxy_enabled: false
 zbxtelegram_proxy_url: "http://proxy.local:3128"  # URL вашего прокси
 zbxtelegram_no_proxy: localhost,127.0.0.1,.local,.localdomain
+zbxtelegram_server_api: "" # Локальный сервер TG API
 
 # --- Zabbix API ---
 zbxtelegram_zabbix_url: "https://zabbix.local/"

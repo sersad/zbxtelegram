@@ -1,0 +1,13 @@
+.idea
+.python-version
+.DS_Store
+__pycache__
+.vscode
+.DS_Store
+*.crt
+*.rpm
+*.deb
+*.key
+*.sec
+*old*
+*bug*
