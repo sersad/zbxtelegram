@@ -1,6 +1,6 @@
 # Zabbix Telegram Integration Role
 
-Ansible role for deploying Zabbix-Telegram integration with interactive buttons on **RED OS 8/9**.
+Ansible role for deploying Zabbix-Telegram integration with interactive buttons on **RED OS 8** and **Ubuntu/Debian**.
 
 ## 📋 Overview
 
