@@ -33,7 +33,8 @@ from aiozabbix import ZabbixAPIException
 
 # aiohttp для прокси
 import aiohttp
-from aiohttp import TCPConnector
+from aiohttp import TCPConnector, ClientSession, ClientTimeout
+import ssl
 
 # FSM импорты
 from aiogram.fsm.state import State, StatesGroup
@@ -735,6 +736,34 @@ async def handle_unknown(callback: CallbackQuery):
     logger.warning(f"Unknown callback received: {callback.data}")
 
 
+# ==================== КАСТОМНАЯ СЕССИЯ ДЛЯ SSL/PROXY ====================
+class SSLDisabledAiohttpSession(AiohttpSession):
+    """
+    Кастомная сессия aiogram с отключенной проверкой SSL
+    (для самоподписанных сертификатов) и поддержкой proxy/api.
+    """
+    def _create_session(self) -> ClientSession:
+        # Создаем SSL-контекст без проверки сертификатов
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        # Создаем коннектор с этим контекстом
+        connector = TCPConnector(
+            limit=100,           # Стандартный лимит из aiogram
+            ttl_dns_cache=30,    # Стандартный TTL
+            ssl=ssl_context,     # ← Наш кастомный контекст
+        )
+
+        # Создаем aiohttp.ClientSession с нашими настройками
+        return ClientSession(
+            connector=connector,
+            json_serialize=self._json_dumps,
+            timeout=self._timeout or ClientTimeout(total=300),
+            proxy=self._proxy,   # ← Прокси передаем сюда
+        )
+
+
 async def main():
     logger.info("Starting Zabbix Telegram Bot Callback Handler...")
 
@@ -758,6 +787,7 @@ async def main():
     # bot = Bot(token=tg_token, session=bot_session)
 
     # Настройка прокси для Telegram
+    # Настройка прокси для Telegram
     proxy_url = None
     if tg_proxy and tg_proxy_server:
         if isinstance(tg_proxy_server, dict):
@@ -766,23 +796,20 @@ async def main():
             proxy_url = tg_proxy_server
         logger.info(f"Using proxy for Telegram API: {proxy_url}")
 
-    # SSL-контекст для самоподписанных сертификатов (используется и для кастомного сервера)
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    connector = TCPConnector(ssl=ssl_context)
+    # Сборка параметров для кастомной сессии
+    session_kwargs = {}
 
-    # Инициализация сессии с поддержкой кастомного API-сервера
-    session_kwargs = {'connector': connector}
-    if proxy_url:
-        session_kwargs['proxy'] = proxy_url
-    if tg_server_api:  # ← Поддержка кастомного сервера из config/env
+    # Поддержка кастомного API-сервера
+    if tg_server_api:
+        from aiogram.client.telegram import TelegramAPIServer
         logger.info(f"Using custom Telegram API server: {tg_server_api}")
         local_server = TelegramAPIServer.from_base(tg_server_api)
         session_kwargs['api'] = local_server
 
-    bot_session = AiohttpSession(**session_kwargs)
+    # Создаем сессию через наш кастомный класс (он сам обработает proxy и SSL)
+    bot_session = SSLDisabledAiohttpSession(proxy=proxy_url, **session_kwargs)
     bot = Bot(token=tg_token, session=bot_session)
+
 
     # Создаём диспетчер с MemoryStorage для FSM
     storage = MemoryStorage()
@@ -840,8 +867,7 @@ async def main():
     try:
         await dp.start_polling(bot, handle_signals=True)
     finally:
-        await bot_session.close()
-        await zabbix_session.close()
+        await bot_session.close()  # Закроет и aiohttp.ClientSession внутри
         logger.info("Bot stopped gracefully")
 
 
