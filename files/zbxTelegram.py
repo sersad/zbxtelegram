@@ -553,6 +553,8 @@ async def main_async():
 
     # Настройка local_server api
     if tg_server_api:
+        if loggings:
+            loggings.info(f"Use Custom API server {tg_server_api}")
         local_server = TelegramAPIServer.from_base(tg_server_api)
         # Создаём сессию БЕЗ кастомного коннектора (SSL отключён глобально) Создайте сессию с этим сервером
         bot_session = AiohttpSession(proxy=proxy_url, api=local_server) if proxy_url else AiohttpSession(api=local_server)

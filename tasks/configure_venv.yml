@@ -32,7 +32,7 @@
   notify:
     - Configure virtual environment
 
-- name: 'configure_venv | Установить зависимости в виртуальное окружение'
+- name: 'configure_venv | Установить зависимости в виртуальное окружение c proxy'
   tags:
     - install
     - venv
@@ -49,5 +49,21 @@
   become_user: "{{ zbxtelegram_user }}"
   register: pip_install
   until: pip_install is succeeded
+  when: http_proxy is defined and http_proxy != ""
+
+- name: 'configure_venv | Установить зависимости в виртуальное окружение без прокси'
+  tags:
+    - install
+    - venv
+  pip:
+    requirements: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
+    virtualenv: "{{ zbxtelegram_venv_dir }}"
+    virtualenv_command: "python3 -m venv"
+    extra_args: "--no-cache-dir --disable-pip-version-check"
+  become: true
+  become_user: "{{ zbxtelegram_user }}"
+  register: pip_install
+  until: pip_install is succeeded
+  when: http_proxy is not defined
 
 ...

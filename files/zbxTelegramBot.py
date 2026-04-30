@@ -10,6 +10,7 @@ import sys
 import ssl
 from datetime import datetime
 
+
 import warnings
 warnings.filterwarnings("ignore", message=".*model_custom_emoji_id.*")
 
@@ -31,6 +32,7 @@ from aiozabbix import ZabbixAPIException
 
 # aiohttp для прокси
 import aiohttp
+from aiohttp import TCPConnector
 
 # FSM импорты
 from aiogram.fsm.state import State, StatesGroup
@@ -64,37 +66,37 @@ except PermissionError as e:
 #     """
 #     if not original_markup or not original_markup.inline_keyboard:
 #         return None
-    
+
 #     new_rows = []
 #     for row in original_markup.inline_keyboard:
 #         # Фильтруем кнопки: оставляем только те, у которых callback_data НЕ начинается с указанного префикса
 #         new_row = [
-#             btn for btn in row 
+#             btn for btn in row
 #             if not (btn.callback_data and btn.callback_data.startswith(action_prefix))
 #         ]
 #         if new_row:  # Сохраняем только непустые строки
 #             new_rows.append(new_row)
-    
+
 #     # Если все кнопки удалены — возвращаем None (убираем клавиатуру полностью)
 #     if not new_rows:
 #         return None
-    
+
 #     return InlineKeyboardMarkup(inline_keyboard=new_rows)
 
 def remove_button_by_action(original_markup, action_prefix):
     """Удаляет кнопку из клавиатуры по префиксу действия в callback_data"""
     if not original_markup or not original_markup.inline_keyboard:
         return None
-    
+
     new_rows = []
     for row in original_markup.inline_keyboard:
         new_row = [
-            btn for btn in row 
+            btn for btn in row
             if not (hasattr(btn, 'callback_data') and btn.callback_data and btn.callback_data.startswith(action_prefix))
         ]
         if new_row:
             new_rows.append(new_row)
-    
+
     return InlineKeyboardMarkup(inline_keyboard=new_rows) if new_rows else None
 
 
@@ -116,14 +118,40 @@ class CallbackFilter(Filter):
         if len(parts) >= 2 and parts[0] == self.action:
             return {'eventid': parts[1], 'extra': parts[2:] if len(parts) > 2 else []}
         return False
-    
+
+
+async def init_zabbix():
+    """Инициализация Zabbix API с отключенной проверкой SSL для самоподписанных сертификатов"""
+    # Создаем SSL контекст без проверки сертификатов
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
+    # Создаем коннектор с отключенной проверкой SSL
+    connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+    # Создаем сессию с этим коннектором
+    session = aiohttp.ClientSession(connector=connector)
+
+    zapi = ZabbixAPI(zabbix_api_url, client_session=session)
+
+    try:
+        await zapi.login(zabbix_api_login, password=zabbix_api_pass)
+        logger.info(f"Successfully authenticated to Zabbix API at {zabbix_api_url}")
+        return zapi, session
+    except Exception as e:
+        logger.error(f"Failed to authenticate to Zabbix API: {e}", exc_info=True)
+        await session.close()
+        await connector.close()  # ← Важно: закрываем и коннектор тоже
+        return None, None
+
 
 async def init_zabbix():
     """Инициализация Zabbix API без кастомных коннекторов"""
     # Простая сессия без прокси для Zabbix (прокси настраивается на уровне ОС/окружения)
     session = aiohttp.ClientSession()
     zapi = ZabbixAPI(zabbix_api_url, client_session=session)
-    
+
     try:
         await zapi.login(zabbix_api_login, password=zabbix_api_pass)
         logger.info(f"Successfully authenticated to Zabbix API at {zabbix_api_url}")
@@ -139,13 +167,13 @@ async def auto_cancel_acknowledge(state: FSMContext, chat_id: int, message_id: i
     try:
         # Ждём 3 минуты (180 секунд)
         await asyncio.sleep(180)
-        
+
         # Проверяем, всё ещё ли пользователь в состоянии ожидания комментария
         current_state = await state.get_state()
         if current_state == AcknowledgeStates.waiting_for_comment.state:
             # Сбрасываем состояние
             await state.clear()
-            
+
             # Отправляем уведомление об отмене
             try:
                 await bot.send_message(
@@ -166,22 +194,22 @@ async def handle_acknowledge(callback: CallbackQuery, eventid: str, state: FSMCo
     """Запрос комментария перед подтверждением события"""
     try:
         await callback.answer()
-        
+
         # Получаем событие
         events = await zapi.event.get(
             eventids=[int(eventid)],
             output=["eventid", "value", "acknowledged", "r_eventid"],
             selectHosts=["name"]
         )
-        
+
         if not events:
             await callback.message.answer("❌ Событие не найдено")
             logger.warning(f"Event {eventid} not found")
             return
-        
+
         event = events[0]
         host_name = event.get('hosts', [{}])[0].get('name', 'N/A') if event.get('hosts') else 'N/A'
-        
+
         # Проверки статуса
         if event.get('r_eventid') and event['r_eventid'] != '0':
             await callback.message.answer(f"ℹ️ Проблема уже восстановлена\nХост: {host_name}")
@@ -192,7 +220,7 @@ async def handle_acknowledge(callback: CallbackQuery, eventid: str, state: FSMCo
         if event.get('acknowledged') == '1':
             await callback.message.answer(f"ℹ️ Событие уже подтверждено ранее\nХост: {host_name}")
             return
-        
+
         # Сохраняем контекст для последующего подтверждения
         await state.update_data(
             eventid=eventid,
@@ -202,19 +230,19 @@ async def handle_acknowledge(callback: CallbackQuery, eventid: str, state: FSMCo
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id
         )
-        
+
         # Кнопка отмены
         cancel_markup = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="❌ Отмена", callback_data=f"cancel_ack:{eventid}")]
         ])
-        
+
         await callback.message.answer(
             f"📝 Введите комментарий для подтверждения события #{eventid}:\n\n"
             "<i>Минимум 3 символа. У вас есть 3 минуты на ввод.</i>",
             reply_markup=cancel_markup,
             parse_mode="HTML"
         )
-        
+
         # Запускаем таймаут-задачу
         timeout_task = asyncio.create_task(
             auto_cancel_acknowledge(
@@ -225,13 +253,13 @@ async def handle_acknowledge(callback: CallbackQuery, eventid: str, state: FSMCo
                 eventid=eventid
             )
         )
-        
+
         # Сохраняем задачу в состоянии для возможности отмены
         await state.update_data(timeout_task=timeout_task)
-        
+
         await state.set_state(AcknowledgeStates.waiting_for_comment)
         logger.info(f"User {callback.from_user.id} ({callback.from_user.full_name}) entered comment input mode for event {eventid}")
-        
+
     except Exception as e:
         await callback.message.answer(f"❌ Ошибка: {str(e)[:80]}")
         logger.error(f"Error in handle_acknowledge init: {e}", exc_info=True)
@@ -242,13 +270,13 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
     """Обработка введённого комментария и подтверждение события"""
     try:
         data = await state.get_data()
-        
+
         # Отменяем таймаут-задачу (если ещё активна)
         timeout_task = data.get('timeout_task')
         if timeout_task and not timeout_task.done():
             timeout_task.cancel()
             logger.debug(f"Cancelled timeout task for event {data['eventid']}")
-        
+
         eventid = data['eventid']
         host_name = data['host_name']
         original_text = data['original_message_text']
@@ -256,7 +284,7 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
         chat_id = data['chat_id']
         message_id = data['message_id']
         user_comment = message.text.strip()
-        
+
         # Валидация комментария
         if not user_comment or len(user_comment) < 3:
             await message.answer(
@@ -264,31 +292,31 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
                 "Повторите ввод или нажмите «Отмена»."
             )
             return
-        
+
         # Формируем полный комментарий для Zabbix
         full_comment = (
             f"{user_comment}\n\n"
             f"Acknowledged via Telegram by {message.from_user.full_name} "
             f"(@{message.from_user.username or 'N/A'})"
         )
-        
+
         # Подтверждаем в Zabbix
         await zapi.event.acknowledge(
             eventids=[int(eventid)],
             action=6,
             message=full_comment
         )
-        
+
         # Формируем текст подтверждения
         ack_text = (
             f"\n\n✅ Подтверждено: {message.from_user.full_name}\n"
             f"💬 {user_comment}\n"
             f"Хост: {host_name}"
         )
-        
+
         # Обновляем исходное сообщение (удаляем только кнопку ✅)
         new_markup = remove_button_by_action(original_markup, 'a:')
-        
+
         try:
             if original_text:  # Текстовое сообщение
                 new_text = (original_text + ack_text)[:4096]
@@ -314,12 +342,12 @@ async def process_acknowledge_comment(message: Message, state: FSMContext, zapi,
                 f"💬 {user_comment}\n"
                 f"Хост: {host_name}"
             )
-        
+
         # Подтверждение пользователю
         await message.answer("✅ Комментарий добавлен к событию")
         logger.info(f"Event {eventid} acknowledged by user {message.from_user.id} with comment: {user_comment[:50]}...")
         await state.clear()
-        
+
     except Exception as e:
         await message.answer(f"❌ Ошибка подтверждения: {str(e)[:80]}")
         logger.error(f"Error processing acknowledge comment for event {eventid}: {e}", exc_info=True)
@@ -330,13 +358,13 @@ async def cancel_acknowledge(callback: CallbackQuery, state: FSMContext):
     """Отмена операции подтверждения"""
     try:
         data = await state.get_data()
-        
+
         # Отменяем таймаут-задачу
         timeout_task = data.get('timeout_task')
         if timeout_task and not timeout_task.done():
             timeout_task.cancel()
             logger.debug(f"Cancelled timeout task on manual cancel")
-        
+
         await state.clear()
         parts = callback.data.split(':', 1)
         eventid = parts[1] if len(parts) > 1 else 'N/A'
@@ -358,40 +386,40 @@ async def cancel_acknowledge(callback: CallbackQuery, state: FSMContext):
 #     """Подтверждение события БЕЗ закрытия (action=6 = подтверждение + сообщение)"""
 #     try:
 #         await callback.answer()
-        
+
 #         # Получаем событие (числовой формат!)
 #         events = await zapi.event.get(
 #             eventids=[int(eventid)],
 #             output=["eventid", "value", "acknowledged", "r_eventid"],
 #             selectHosts=["name"]
 #         )
-        
+
 #         if not events:
 #             await callback.message.answer("❌ Событие не найдено")
 #             logger.warning(f"Event {eventid} not found")
 #             return
-        
+
 #         event = events[0]
 #         host_name = event.get('hosts', [{}])[0].get('name', 'N/A') if event.get('hosts') else 'N/A'
-        
+
 #         # Проверка 1: событие уже восстановлено (есть событие восстановления)
 #         if event.get('r_eventid') and event['r_eventid'] != '0':
 #             await callback.message.answer(f"ℹ️ Проблема уже восстановлена\nХост: {host_name}")
 #             logger.info(f"Event {eventid} already resolved (r_eventid={event['r_eventid']})")
 #             return
-        
+
 #         # Проверка 2: событие закрыто (value=0)
 #         if event['value'] == '0':
 #             await callback.message.answer(f"ℹ️ Событие уже восстановлено\nХост: {host_name}")
 #             logger.info(f"Event {eventid} value=0")
 #             return
-        
+
 #         # Проверка 3: уже подтверждено
 #         if event.get('acknowledged') == '1':
 #             await callback.message.answer(f"ℹ️ Событие уже подтверждено ранее\nХост: {host_name}")
 #             logger.info(f"Event {eventid} already acknowledged")
 #             return
-        
+
 #         # === ПОДТВЕРЖДЕНИЕ БЕЗ ЗАКРЫТИЯ (action=6) ===
 #         try:
 #             # action=6 = 2 (подтверждение) + 4 (сообщение)
@@ -400,28 +428,28 @@ async def cancel_acknowledge(callback: CallbackQuery, state: FSMContext):
 #                 action=6,
 #                 message=f"Acknowledged via Telegram by {callback.from_user.full_name} (@{callback.from_user.username or 'N/A'})"
 #             )
-            
+
 #             # === УДАЛЕНИЕ ТОЛЬКО КНОПКИ ✅ (префикс 'a:') ===
 #             original_markup = callback.message.reply_markup
 #             new_rows = []
-            
+
 #             # Формируем новую клавиатуру без кнопки подтверждения
 #             if original_markup and hasattr(original_markup, 'inline_keyboard') and original_markup.inline_keyboard:
 #                 for row in original_markup.inline_keyboard:
 #                     # Оставляем все кнопки, кроме тех, у которых callback_data начинается с 'a:'
 #                     new_row = [
-#                         btn for btn in row 
+#                         btn for btn in row
 #                         if not (hasattr(btn, 'callback_data') and btn.callback_data and btn.callback_data.startswith('a:'))
 #                     ]
 #                     if new_row:  # Сохраняем только непустые строки
 #                         new_rows.append(new_row)
-            
+
 #             # Создаём новую клавиатуру (или None если все кнопки удалены)
 #             new_markup = InlineKeyboardMarkup(inline_keyboard=new_rows) if new_rows else None
-            
+
 #             # Формируем текст подтверждения
 #             ack_text = f"\n\n✅ Подтверждено: {callback.from_user.full_name}\nХост: {host_name}"
-            
+
 #             # Случай 1: текстовое сообщение
 #             if callback.message.text:
 #                 new_text = (callback.message.text + ack_text)[:4096]
@@ -430,7 +458,7 @@ async def cancel_acknowledge(callback: CallbackQuery, state: FSMContext):
 #                     reply_markup=new_markup,  # ← Клавиатура БЕЗ кнопки ✅, остальные кнопки сохранены
 #                     parse_mode="HTML"
 #                 )
-            
+
 #             # Случай 2: медиа-сообщение (изображение/видео) с подписью
 #             elif callback.message.caption:
 #                 new_caption = (callback.message.caption + ack_text)[:1024]
@@ -439,26 +467,26 @@ async def cancel_acknowledge(callback: CallbackQuery, state: FSMContext):
 #                     reply_markup=new_markup,  # ← Клавиатура БЕЗ кнопки ✅
 #                     parse_mode="HTML"
 #                 )
-            
+
 #             # Случай 3: сообщение без текста и подписи (крайне редко)
 #             else:
 #                 await callback.message.answer(
 #                     f"✅ Событие #{eventid} подтверждено пользователем {callback.from_user.full_name}\nХост: {host_name}",
 #                     reply_markup=None
 #                 )
-            
+
 #             logger.info(f"Event {eventid} acknowledged (action=6) by user {callback.from_user.id}")
-            
+
 #         except ZabbixAPIException as e:
 #             error_code = e.args[1] if len(e.args) > 1 else None
 #             error_msg = e.args[0] if e.args else "Unknown error"
-            
+
 #             # Проверка после ошибки (гонка условий)
 #             post_check = await zapi.event.get(
 #                 eventids=[int(eventid)],
 #                 output=["acknowledged", "r_eventid", "value"]
 #             )
-            
+
 #             if post_check:
 #                 post_event = post_check[0]
 #                 if post_event.get('acknowledged') == '1':
@@ -480,7 +508,7 @@ async def cancel_acknowledge(callback: CallbackQuery, state: FSMContext):
 #             else:
 #                 await callback.message.answer("❌ Событие удалено из системы")
 #                 logger.warning(f"Event {eventid} disappeared")
-    
+
 #     except ValueError as e:
 #         await callback.message.answer(f"❌ Неверный формат ID события: {eventid}")
 #         logger.error(f"Invalid eventid format '{eventid}': {e}")
@@ -493,22 +521,22 @@ async def handle_messages(callback: CallbackQuery, eventid: str, zapi):
     """Показать сообщения/комментарии к событию с проверкой существования"""
     try:
         await callback.answer()
-        
+
         # Проверка существования события
         events = await zapi.event.get(
             eventids=[eventid],
             output=["eventid"],
             select_acknowledges="extend"
         )
-        
+
         if not events:
             await callback.message.answer("❌ Событие не найдено")
             logger.warning(f"Event {eventid} not found for messages request")
             return
-        
+
         event = events[0]
         acks = event.get('acknowledges', [])
-        
+
         if not acks:
             text = "📝 Нет комментариев к событию"
         else:
@@ -518,12 +546,12 @@ async def handle_messages(callback: CallbackQuery, eventid: str, zapi):
                 user = ack.get('alias', ack.get('name', 'Unknown'))
                 msg = ack.get('message', '').strip() or '(без комментария)'
                 comments.append(f"▫️ {dt.strftime('%Y-%m-%d %H:%M')} — {user}:\n   {msg}")
-            
+
             text = "📝 Комментарии к событию:\n" + "\n\n".join(comments)
-        
+
         await callback.message.answer(text, disable_notification=True)
         logger.info(f"Messages shown for event {eventid}")
-        
+
     except ZabbixAPIException as e:
         error_code = e.args[1] if len(e.args) > 1 else None
         error_msg = e.args[0] if e.args else "Unknown error"
@@ -539,7 +567,7 @@ async def handle_history(callback: CallbackQuery, eventid: str, zapi):
     """Показать историю события с ТЕКУЩИМ статусом проблемы"""
     try:
         await callback.answer()
-        
+
         # Получаем событие с данными о восстановлении (числовой формат!)
         events = await zapi.event.get(
             eventids=[int(eventid)],  # ← ЧИСЛО
@@ -547,22 +575,22 @@ async def handle_history(callback: CallbackQuery, eventid: str, zapi):
             selectHosts=["hostid", "name"],
             selectRelatedObject=["description", "expression"]
         )
-        
+
         if not events:
             await callback.message.answer("❌ Событие не найдено")
             logger.warning(f"Event {eventid} not found for history request")
             return
-        
+
         event = events[0]
         host_name = event.get('hosts', [{}])[0].get('name', 'N/A') if event.get('hosts') else 'N/A'
         trigger_name = event.get('relatedObject', {}).get('description', 'N/A')
         event_time = datetime.fromtimestamp(int(event['clock'])).strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # Определяем ТЕКУЩИЙ статус проблемы
         current_status = "🔴 АКТИВНА"
         status_details = ""
         restore_time_str = ""
-        
+
         r_eventid = event.get('r_eventid')
         if r_eventid and r_eventid != '0':
             # Проблема восстановлена — получаем время восстановления
@@ -586,7 +614,7 @@ async def handle_history(callback: CallbackQuery, eventid: str, zapi):
             )
             if not problems:
                 current_status = "🟢 ВОССТАНОВЛЕНА (активная проблема не найдена)"
-        
+
         # Формируем сообщение
         text = (
             f"📈 Событие #{eventid}\n"
@@ -595,10 +623,10 @@ async def handle_history(callback: CallbackQuery, eventid: str, zapi):
             f"Хост: {host_name}\n"
             f"Триггер: {trigger_name}"
         )
-        
+
         await callback.message.answer(text, disable_notification=True)
         logger.info(f"History shown for event {eventid} (current status: {current_status})")
-        
+
     except ZabbixAPIException as e:
         error_code = e.args[1] if len(e.args) > 1 else None
         error_msg = e.args[0] if e.args else "Unknown error"
@@ -614,7 +642,7 @@ async def handle_last_value(callback: CallbackQuery, eventid: str, zapi):
     """Показать последнее значение элемента данных с проверкой существования"""
     try:
         await callback.answer()
-       
+
         # Получаем событие
         events = await zapi.event.get(
             eventids=[int(eventid)],  # ← ЧИСЛО
@@ -634,7 +662,7 @@ async def handle_last_value(callback: CallbackQuery, eventid: str, zapi):
 
 
         triggerid = events[0]['objectid']
-        
+
         # Получаем элементы данных
         items = await zapi.item.get(
             triggerids=[triggerid],
@@ -642,11 +670,11 @@ async def handle_last_value(callback: CallbackQuery, eventid: str, zapi):
             sortfield="name",
             limit=5
         )
-        
+
         if not items:
             await callback.message.answer("ℹ️ Нет данных для отображения")
             return
-        
+
         lines = [f"⏱ Последние значения для события #{eventid} {trigger_name} на {host_name}:"]
         for item in items:
             dt = datetime.fromtimestamp(int(item['lastclock'])) if item.get('lastclock') else None
@@ -654,10 +682,10 @@ async def handle_last_value(callback: CallbackQuery, eventid: str, zapi):
             units = f" {item['units']}" if item.get('units') and item['units'] != 'unixtime' else ""
             time_str = f" ({dt.strftime('%H:%M:%S')})" if dt else ""
             lines.append(f"▫️ {item['name']}: {value}{units}{time_str}")
-        
+
         await callback.message.answer("\n".join(lines), disable_notification=True)
         logger.info(f"Last values shown for event {eventid}")
-        
+
     except ZabbixAPIException as e:
         error_code = e.args[1] if len(e.args) > 1 else None
         error_msg = e.args[0] if e.args else "Unknown error"
@@ -673,20 +701,20 @@ async def handle_graphs(callback: CallbackQuery, eventid: str, extra: list, zapi
     """Показать график (ссылка на график в Zabbix)"""
     try:
         await callback.answer()
-        
+
         # Проверка существования события
         events = await zapi.event.get(
             eventids=[eventid],
             output=["eventid"]
         )
-        
+
         if not events:
             await callback.message.answer("❌ Событие не найдено")
             logger.warning(f"Event {eventid} not found for graph request")
             return
-        
+
         itemid = extra[0] if extra else None
-        
+
         if itemid:
             # Формат URL: https://zabbix.tspd.local/history.php?action=showgraph&itemids%5B%5D=123456
             graph_url = f"{zabbix_api_url.rstrip('/')}/history.php?action=showgraph&itemids%5B%5D={itemid}"
@@ -699,10 +727,10 @@ async def handle_graphs(callback: CallbackQuery, eventid: str, extra: list, zapi
                 triggerid='0'
             )
             text = f"📊 Открыть событие в Zabbix:\n{event_url}"
-        
+
         await callback.message.answer(text, disable_web_page_preview=False)
         logger.info(f"Graph link sent for event {eventid}, itemid={itemid}")
-        
+
     except ZabbixAPIException as e:
         error_code = e.args[1] if len(e.args) > 1 else None
         error_msg = e.args[0] if e.args else "Unknown error"
@@ -721,13 +749,13 @@ async def handle_unknown(callback: CallbackQuery):
 
 async def main():
     logger.info("Starting Zabbix Telegram Bot Callback Handler...")
-    
+
     # Инициализация Zabbix
     zapi, zabbix_session = await init_zabbix()
     if not zapi:
         logger.critical("Cannot start bot without Zabbix API connection")
         return 1
-    
+
     # Настройка прокси для Telegram (простой вариант)
     proxy_url = None
     if tg_proxy and tg_proxy_server:
@@ -736,15 +764,15 @@ async def main():
         else:
             proxy_url = tg_proxy_server
         logger.info(f"Using proxy for Telegram API: {proxy_url}")
-    
+
     # Инициализация бота с хранилищем для FSM
     bot_session = AiohttpSession(proxy=proxy_url) if proxy_url else AiohttpSession()
     bot = Bot(token=tg_token, session=bot_session)
-    
+
     # Создаём диспетчер с MemoryStorage для FSM
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
-    
+
     # Проверка подключения
     try:
         me = await bot.get_me()
@@ -754,44 +782,44 @@ async def main():
         await zabbix_session.close()
         await bot_session.close()
         return 1
-    
+
     # Обработчик кнопки ✅ — запрос комментария (передаём bot!)
     @dp.callback_query(CallbackFilter(action="a"))
     async def cb_ack(callback: CallbackQuery, eventid: str, state: FSMContext):
         await handle_acknowledge(callback, eventid, state, zapi, bot)  # ← bot передан!
-    
+
     # Обработчик текстового комментария (передаём bot!)
     @dp.message(AcknowledgeStates.waiting_for_comment)
     async def msg_comment(message: Message, state: FSMContext):
         await process_acknowledge_comment(message, state, zapi, bot)  # ← bot передан!
-    
+
     # Обработчик отмены подтверждения
     @dp.callback_query(lambda c: c.data.startswith('cancel_ack:'))
     async def cb_cancel(callback: CallbackQuery, state: FSMContext):
         await cancel_acknowledge(callback, state)
-    
+
     # Остальные кнопки (без изменений)
     @dp.callback_query(CallbackFilter(action="m"))
     async def cb_msg(callback: CallbackQuery, eventid: str):
         await handle_messages(callback, eventid, zapi)
-    
+
     @dp.callback_query(CallbackFilter(action="h"))
     async def cb_hist(callback: CallbackQuery, eventid: str):
         await handle_history(callback, eventid, zapi)
-    
+
     @dp.callback_query(CallbackFilter(action="l"))
     async def cb_last(callback: CallbackQuery, eventid: str):
         await handle_last_value(callback, eventid, zapi)
-    
+
     @dp.callback_query(CallbackFilter(action="g"))
     async def cb_graph(callback: CallbackQuery, eventid: str, extra: list):
         await handle_graphs(callback, eventid, extra, zapi)
-    
+
     # Обработчик неизвестных колбэков
     @dp.callback_query()
     async def cb_unknown(callback: CallbackQuery):
         await handle_unknown(callback)
-            
+
     # Запуск
     logger.info("Bot is ready to receive callbacks...")
     try:
@@ -809,4 +837,3 @@ if __name__ == "__main__":
         logger.info("Bot stopped by user")
     except Exception as e:
         logger.critical(f"Unhandled exception: {e}", exc_info=True)
-        
