@@ -25,6 +25,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, BufferedInputFile
 from aiogram.filters import Filter
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 
 # Aiozabbix
 from aiozabbix import ZabbixAPI
@@ -133,6 +134,9 @@ async def init_zabbix():
     # Создаем сессию с этим коннектором
     session = aiohttp.ClientSession(connector=connector)
 
+    # # Простая сессия без прокси для Zabbix (прокси настраивается на уровне ОС/окружения)
+    # session = aiohttp.ClientSession()
+
     zapi = ZabbixAPI(zabbix_api_url, client_session=session)
 
     try:
@@ -143,22 +147,6 @@ async def init_zabbix():
         logger.error(f"Failed to authenticate to Zabbix API: {e}", exc_info=True)
         await session.close()
         await connector.close()  # ← Важно: закрываем и коннектор тоже
-        return None, None
-
-
-async def init_zabbix():
-    """Инициализация Zabbix API без кастомных коннекторов"""
-    # Простая сессия без прокси для Zabbix (прокси настраивается на уровне ОС/окружения)
-    session = aiohttp.ClientSession()
-    zapi = ZabbixAPI(zabbix_api_url, client_session=session)
-
-    try:
-        await zapi.login(zabbix_api_login, password=zabbix_api_pass)
-        logger.info(f"Successfully authenticated to Zabbix API at {zabbix_api_url}")
-        return zapi, session
-    except Exception as e:
-        logger.error(f"Failed to authenticate to Zabbix API: {e}", exc_info=True)
-        await session.close()
         return None, None
 
 
@@ -756,7 +744,20 @@ async def main():
         logger.critical("Cannot start bot without Zabbix API connection")
         return 1
 
-    # Настройка прокси для Telegram (простой вариант)
+    # # Настройка прокси для Telegram (простой вариант)
+    # proxy_url = None
+    # if tg_proxy and tg_proxy_server:
+    #     if isinstance(tg_proxy_server, dict):
+    #         proxy_url = next(iter(tg_proxy_server.values()))
+    #     else:
+    #         proxy_url = tg_proxy_server
+    #     logger.info(f"Using proxy for Telegram API: {proxy_url}")
+
+    # # Инициализация бота с хранилищем для FSM
+    # bot_session = AiohttpSession(proxy=proxy_url) if proxy_url else AiohttpSession()
+    # bot = Bot(token=tg_token, session=bot_session)
+
+    # Настройка прокси для Telegram
     proxy_url = None
     if tg_proxy and tg_proxy_server:
         if isinstance(tg_proxy_server, dict):
@@ -765,8 +766,22 @@ async def main():
             proxy_url = tg_proxy_server
         logger.info(f"Using proxy for Telegram API: {proxy_url}")
 
-    # Инициализация бота с хранилищем для FSM
-    bot_session = AiohttpSession(proxy=proxy_url) if proxy_url else AiohttpSession()
+    # SSL-контекст для самоподписанных сертификатов (используется и для кастомного сервера)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    connector = TCPConnector(ssl=ssl_context)
+
+    # Инициализация сессии с поддержкой кастомного API-сервера
+    session_kwargs = {'connector': connector}
+    if proxy_url:
+        session_kwargs['proxy'] = proxy_url
+    if tg_server_api:  # ← Поддержка кастомного сервера из config/env
+        logger.info(f"Using custom Telegram API server: {tg_server_api}")
+        local_server = TelegramAPIServer.from_base(tg_server_api)
+        session_kwargs['api'] = local_server
+
+    bot_session = AiohttpSession(**session_kwargs)
     bot = Bot(token=tg_token, session=bot_session)
 
     # Создаём диспетчер с MemoryStorage для FSM

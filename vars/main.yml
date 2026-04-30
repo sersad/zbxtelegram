@@ -1,0 +1,6 @@
+---
+python_standalone_url: "https://github.com/astral-sh/python-build-standalone/releases/download/20260408/cpython-3.13.13+20260408-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+python_install_base: "/opt"
+python_exec: "{{ python_install_base }}/python/bin/python3.13"
+
+...

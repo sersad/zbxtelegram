@@ -1,4 +1,7 @@
 ---
+# true = полное удаление и пересоздание venv
+zbxtelegram_venv_recreate: false
+
 # --- Пути и файлы ---
 zbxtelegram_alertscripts_dir: "/usr/lib/zabbix/alertscripts"
 zbxtelegram_script_name: "zbxTelegram.py"

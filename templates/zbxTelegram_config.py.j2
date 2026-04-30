@@ -6,7 +6,11 @@
 tg_token = "{{ zbxtelegram_bot_token }}"
 tg_proxy = {% if zbxtelegram_proxy_enabled %}True{% else %}False{% endif %}
 
+{% if zbxtelegram_server_api is defined and zbxtelegram_server_api %}
 tg_server_api = "{{ zbxtelegram_server_api }}"
+{% else %}
+tg_server_api = None
+{% endif %}
 
 {% if zbxtelegram_proxy_enabled %}
 tg_proxy_server = "{{ zbxtelegram_proxy_url }}"

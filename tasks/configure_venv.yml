@@ -1,10 +1,48 @@
 ---
+- name: 'configure_venv | Принудительно удалить старое виртуальное окружение'
+  tags:
+    - install
+    - venv
+  file:
+    path: "{{ zbxtelegram_venv_dir }}"
+    state: absent
+  when: zbxtelegram_venv_recreate | default(false) | bool
+  become: true
+
+- name: 'configure_venv | Проверить наличие Python 3.13'
+  tags:
+    - install
+    - venv
+  stat:
+    path: "{{ python_exec }}"
+  register: python_check
+
+- name: 'configure_venv | Скачать и распаковать Python 3.13 (Standalone)'
+  tags:
+    - install
+    - venv
+  block:
+    - get_url:
+        url: "{{ python_standalone_url }}"
+        dest: "/tmp/cpython-3.13.tar.gz"
+        mode: "0644"
+    - unarchive:
+        src: "/tmp/cpython-3.13.tar.gz"
+        dest: "{{ python_install_base }}"
+        remote_src: yes
+        creates: "{{ python_exec }}"
+    - file:
+        path: "/tmp/cpython-3.13.tar.gz"
+        state: absent
+  when: not python_check.stat.exists
+  become: true
+
 - name: 'configure_venv | Создать виртуальное окружение'
   tags:
     - install
     - venv
   command:
-    cmd: "python3 -m venv {{ zbxtelegram_venv_dir }}"
+    cmd: "{{ python_exec }} -m venv {{ zbxtelegram_venv_dir }}"
     creates: "{{ zbxtelegram_venv_dir }}/bin/activate"
   become: true
   become_user: "{{ zbxtelegram_user }}"
@@ -39,12 +77,8 @@
   pip:
     requirements: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
     virtualenv: "{{ zbxtelegram_venv_dir }}"
-    virtualenv_command: "python3 -m venv"
+    # virtualenv_command убран: venv создаётся явно выше, это предотвращает конфликты версий pip
     extra_args: "--no-cache-dir --disable-pip-version-check --proxy {{ http_proxy | default('') }}"
-  # environment:
-  #   http_proxy: "{{ http_proxy | default('') }}"
-  #   https_proxy: "{{ https_proxy | default('') }}"
-  #   no_proxy: "{{ no_proxy | default('') }}"
   become: true
   become_user: "{{ zbxtelegram_user }}"
   register: pip_install
@@ -58,12 +92,22 @@
   pip:
     requirements: "{{ zbxtelegram_alertscripts_dir }}/requirements.txt"
     virtualenv: "{{ zbxtelegram_venv_dir }}"
-    virtualenv_command: "python3 -m venv"
     extra_args: "--no-cache-dir --disable-pip-version-check"
   become: true
   become_user: "{{ zbxtelegram_user }}"
   register: pip_install
   until: pip_install is succeeded
   when: http_proxy is not defined
+
+- name: 'configure_venv | Патч aiozabbix для Zabbix 7+ (user → username)'
+  tags:
+    - install
+    - venv
+  replace:
+    path: "{{ zbxtelegram_venv_dir }}/lib/python3.13/site-packages/aiozabbix/__init__.py"
+    regexp: 'await sub\.user\.login\(user='
+    replace: 'await sub.user.login(username='
+  become: true
+  become_user: "{{ zbxtelegram_user }}"
 
 ...
