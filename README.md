@@ -552,10 +552,9 @@ MIT License — see [LICENSE](LICENSE) file for details.
 
 ## 👤 Author Information
 
-This role was created for **RTK-INFORM** by **Sergey Sadovnikov**.
+This role was created by **Sergey Sadovnikov**.
 
 - 📧 Contact: @sersad
-- 🏢 Organization: RTK-INFORM
 - 🗓️ Last updated: April 2026
 
 ---
@@ -577,4 +576,4 @@ This role was created for **RTK-INFORM** by **Sergey Sadovnikov**.
 
 ---
 
-> ⚠️ **Disclaimer**: This role is designed for internal use in RTK infrastructure. Adapt security settings (SSL, permissions, SELinux) to your organization's policies before production deployment.
+> ⚠️ **Disclaimer**: This role is designed for internal use. Adapt security settings (SSL, permissions, SELinux) to your organization's policies before production deployment.
