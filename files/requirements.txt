@@ -1,10 +1,10 @@
-aiogram>=3.0.0
-aiozabbix>=1.0.0
-aiohttp>=3.8.0
-aiohttp_socks==0.11.0
-pillow>=12.1.0
-xmltodict>=1.0.2
-requests>=2.32.5
+aiogram>=3.27.0,<4.0.0
+aiozabbix==1.3.1
+aiohttp>=3.13.0,<4.0.0
+aiohttp_socks>=0.11.0,<1.0.0
+pillow>=12.2.0,<13.0.0
+xmltodict>=1.0.4,<2.0.0
+requests>=2.32.5,<3.0.0
 # urllib3==2.6.3
 # PySocks==1.7.1
 # python-socks[asyncio]==2.8.0

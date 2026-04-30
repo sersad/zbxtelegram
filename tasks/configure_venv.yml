@@ -22,10 +22,21 @@
     - install
     - venv
   block:
-    - get_url:
+    - name: 'Download Python 3.13 standalone'
+      get_url:
         url: "{{ python_standalone_url }}"
         dest: "/tmp/cpython-3.13.tar.gz"
         mode: "0644"
+        timeout: 300
+        use_proxy: yes
+        validate_certs: false  # Отключите только если прокси с самоподписанным cert
+      environment:
+        http_proxy: "{{ http_proxy | default('') }}"
+        https_proxy: "{{ https_proxy | default(http_proxy) | default('') }}"
+        no_proxy: "{{ no_proxy | default('') }}"
+      retries: 3
+      delay: 10
+
     - unarchive:
         src: "/tmp/cpython-3.13.tar.gz"
         dest: "{{ python_install_base }}"
