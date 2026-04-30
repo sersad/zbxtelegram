@@ -53,7 +53,7 @@ zbxtelegram_selinux_alertscripts_context: "bin_t"
 # --- Systemd ---
 zbxtelegram_service_name: "zbxtelegrambot.service"
 zbxtelegram_restart_sec: 10
-zbxtelegram_env_file: "/etc/sysconfig/zbxtelegrambot"
+
 
 # --- Zabbix интеграция ---
 zbxtelegram_zabbix_alertscript_name: "Telegram"

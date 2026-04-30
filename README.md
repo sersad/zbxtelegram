@@ -143,7 +143,6 @@ This role deploys a complete Zabbix-Telegram integration solution that includes:
 |----------|---------|-------------|
 | `zbxtelegram_service_name` | `"zbxtelegrambot.service"` | Name of systemd service unit |
 | `zbxtelegram_restart_sec` | `10` | Delay before auto-restart on failure |
-| `zbxtelegram_env_file` | `"/etc/sysconfig/zbxtelegrambot"` | Path to environment file for service |
 
 ### 🔗 Zabbix Integration
 

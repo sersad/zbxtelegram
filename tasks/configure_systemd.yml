@@ -1,4 +1,15 @@
 ---
+- name: 'configure_systemd | Определить путь к env-файлу в зависимости от ОС'
+  ansible.builtin.set_fact:
+    zbxtelegram_env_file: >-
+      {{ os_env_paths[ansible_os_family] | default('/etc/default') }}/zbxtelegrambot
+  vars:
+    os_env_paths:
+      Red: /etc/sysconfig
+      RED: /etc/sysconfig
+      RedHat: /etc/sysconfig   # RHEL, CentOS, AlmaLinux, Rocky, Oracle, RED OS
+      Debian: /etc/default     # Ubuntu, Debian, Linux Mint, Pop!_OS
+
 - name: 'configure_systemd | Сгенерировать файл переменных окружения'
   tags:
     - systemd
